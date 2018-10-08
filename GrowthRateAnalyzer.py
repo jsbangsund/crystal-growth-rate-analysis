@@ -191,7 +191,8 @@ class GrowthRateAnalyzer(tk.ttk.Frame):
         self.df_file = None
         self.base_dir = os.getcwd()
         # Default dir for troubleshooting purposes
-        #self.base_dir = 'C:/Users/JSB/Google Drive/Research/Data/Gratings/2018-06-11_TPBi_30nm_rate_depend/0.1_Aps/10x_timeseries/'
+        self.base_dir = os.path.join(os.path.expanduser('~'),'Google Drive',
+                                  'Research','Data','Gratings')
         # initialize dataframe save location
         self.df_dir = os.path.join(os.getcwd(),'dataframes')
         if not os.path.isdir(self.df_dir):
@@ -518,41 +519,47 @@ class GrowthRateAnalyzer(tk.ttk.Frame):
         for file in files:
             file_list.append(file)
         self.time_files = file_list
-        # Try to find magnification and other metadata
-        base_file = os.path.basename(self.time_files[0])
-        base_file = base_file.replace('-','_')
-        splits = base_file.split('_')
-        for split in splits:
-            split2 = split.split('=')
-            if 'mag' in split.lower():
-                # looking for _mag=##x_ or _magnification=##x_
-                self.s_mag.set(split2[1])
-                print(self.s_mag.get())
-            elif 'sub' in split.lower():
-                # looking for _sub=*_ or _substrate=*_ in filename
-                self.s_sample_props['substrate'].set(split2[1])
-            elif any(x in split for x in ['Ta','Tanneal','T']):
-                # looking for _T=*C_ or _Tanneal=*C_ or _Ta=*C_
-                self.s_sample_props['anneal_temp_c'].set(split2[1][:-1])
-            elif any(x in split for x in ['t','thick','thickness']) and 'nm' in split:
-                # looking for _t=*nm_ or _thick=*nm_, etc.
-                self.s_sample_props['thickness_nm'].set(split2[1][:-2])
-            elif 'mat=' in split:
-                self.s_sample_props['material'].set(split[4:])
-            elif any(x in split for x in ['Td','Tgrowth','Tdep']):
-                self.s_sample_props['deposition_temp_c'].set(split2[1][:-1])
+        # Try to find magnification and other metadata, if base_dir has changed
+        new_base_dir = os.path.dirname(self.time_files[0])
+        if not new_base_dir==self.base_dir:
+            base_file = os.path.basename(self.time_files[0])
+            base_file = base_file.replace('-','_')
+            splits = base_file.split('_')
+            for split in splits:
+                split2 = split.split('=')
+                if 'mag' in split.lower():
+                    # looking for _mag=##x_ or _magnification=##x_
+                    self.s_mag.set(split2[1])
+                    print(self.s_mag.get())
+                elif 'sub' in split.lower():
+                    # looking for _sub=*_ or _substrate=*_ in filename
+                    self.s_sample_props['substrate'].set(split2[1])
+                elif any(x in split for x in ['Ta','Tanneal','T']):
+                    # looking for _T=*C_ or _Tanneal=*C_ or _Ta=*C_
+                    self.s_sample_props['anneal_temp_c'].set(split2[1][:-1])
+                elif any(x in split for x in ['t','thick','thickness']) and 'nm' in split:
+                    # looking for _t=*nm_ or _thick=*nm_, etc.
+                    self.s_sample_props['thickness_nm'].set(split2[1][:-2])
+                elif 'mat=' in split:
+                    self.s_sample_props['material'].set(split[4:])
+                elif any(x in split for x in ['Td','Tgrowth','Tdep']):
+                    self.s_sample_props['deposition_temp_c'].set(split2[1][:-1])
 
-        # Try to find growth date from folder (move up a level up to 4 times)
-        split = os.path.split(self.base_dir)
-        for i in range(4):
-            if len(split[1].split('_')[0])==10 and all(split[1][idx].isnumeric for idx in [0,1,2,3,5,6,8,9]):
-                self.s_sample_props['growth_date'].set(split[1].split('_')[0])
-                break
-            else:
-                split = os.path.split(split[0])
-
-
-
+            # Try to find growth date from folder (move up a level up to 4 times)
+            split = os.path.split(new_base_dir)
+            for i in range(4):
+                # check if the length matches yyyy-mm-dd
+                if len(split[1].split('_')[0])==10: 
+                    # check whether string is numeric at right positions for yyyy-mm-dd
+                    if all(split[1][idx].isnumeric for idx in [0,1,2,3,5,6,8,9]):
+                        self.s_sample_props['growth_date'].set(split[1].split('_')[0])
+                        break
+                else:
+                    split = os.path.split(split[0])
+        # Update directory:
+        self.base_dir = new_base_dir
+        self.t_file_dir.delete("1.0",END)
+        self.t_file_dir.insert(INSERT, self.base_dir +'/')
 
     def pick_crop_region(self):
         # Zoom to region of interest in image. This will select crop region below
