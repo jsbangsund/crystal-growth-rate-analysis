@@ -50,7 +50,7 @@ from matplotlib.patches import Rectangle
 from palettable.tableau import Tableau_10
 from palettable.colorbrewer.qualitative import Set1_9
 # local code imports
-import imageHelper
+from oledpy import image_helper
 
 #plt.style.use('ggplot')
 # styleDir = os.path.join(os.path.expanduser('~'),
@@ -141,6 +141,35 @@ def threshold_crop_denoise(img_file,x1,x2,y1,y2,threshold_lower,threshold_upper,
     denoised = median(thresholded, disk(d))
     return denoised,thresholded,cropped
 
+def subtract_and_denoise(img_file1,img_file2,x1,x2,y1,y2,d,threshold=None,
+                         rescale=None,img1=None,img2=None,equalize_hist=False,clip_limit=0.05):
+    # Read image in gray scale (mode='L'), unless a pre-loaded image is passed
+    if img1==None:
+        img1=misc.imread(img_file1,mode='L')
+    if img2==None:
+        img2=misc.imread(img_file2,mode='L')
+    if rescale:
+        img1 = exposure.rescale_intensity(img1,in_range=rescale)
+        img2 = exposure.rescale_intensity(img2,in_range=rescale)
+    if equalize_hist:
+        img1 = exposure.equalize_adapthist(img1,clip_limit=clip_limit)
+        img1 = 255 * img1
+        img2 = exposure.equalize_adapthist(img2,clip_limit=clip_limit)
+        img2 = 255 * img2
+    cropped1 = img1[y1:y2,x1:x2]
+    cropped2 = img2[y1:y2,x1:x2]
+    # Subtract and take absolute value. Convert to float so that negative values are possible
+    subtract=np.abs(cropped2.astype(np.float32)-cropped1.astype(np.float32))
+    # Normalize from 0 to 1
+    subtract_norm = (subtract-subtract.min())/(subtract.max()-subtract.min())
+    # Threshold, if lower threshold is given:
+    if threshold==None:
+        thresholded = subtract_norm
+    else:
+        thresholded = subtract_norm > threshold
+    denoised = median(thresholded, disk(d))
+    return denoised,thresholded,subtract_norm,cropped2
+
 def set_new_im_data(ax,im_data,new_img):
     # Change data extent to match new image
     im_data.set_extent((0, new_img.shape[1], new_img.shape[0], 0))
@@ -168,7 +197,7 @@ def get_growth_edge(img,line,length_per_pixel):
     growth_front_endpoint = np.where(profile==np.amax(profile))[0][-1]
     line_endpoint = profile.shape[0]
     # Get total line length
-    total_line_length = imageHelper.get_line_length(
+    total_line_length = image_helper.get_line_length(
                             line,mag='20x',unit='um',
                             length_per_pixel=length_per_pixel)
     # Distance to growth front is the fraction of the line up to the last point
@@ -209,16 +238,16 @@ class GrowthRateAnalyzer(tk.ttk.Frame):
         # Create a frame to hold sample properties and the plotter
         sample_props_and_plot_container = tk.ttk.Frame(self.parent)
         sample_props_and_plot_container.pack()
-        sample_props_container = tk.ttk.Frame(sample_props_and_plot_container)
-        sample_props_container.pack(side=LEFT)
+        self.sample_props_container = tk.ttk.Frame(sample_props_and_plot_container)
+        self.sample_props_container.pack(side=LEFT)
         plotContainer = tk.ttk.Frame(sample_props_and_plot_container)
         plotContainer.pack(side=LEFT)#fill=BOTH, expand=True
         crop_container = tk.ttk.Frame(self.parent)
         crop_container.pack()
-        threshold_plot_container = tk.ttk.Frame(self.parent)
-        threshold_plot_container.pack(fill=BOTH, expand=True)
-        threshold_container = tk.ttk.Frame(self.parent)
-        threshold_container.pack()
+        self.threshold_plot_container = tk.ttk.Frame(self.parent)
+        self.threshold_plot_container.pack(fill=BOTH, expand=True)
+        self.threshold_container = tk.ttk.Frame(self.parent)
+        self.threshold_container.pack()
         # Open directory prompt
         self.l_file_directory = tk.Label(file_container,
                                  text='Time Series Directory')
@@ -226,90 +255,16 @@ class GrowthRateAnalyzer(tk.ttk.Frame):
         self.t_file_dir = tk.Text(file_container)
         self.t_file_dir.configure(height = 1, width=70)
         self.t_file_dir.grid(row=0, column=1, sticky=W)
-        self.b_getDir = tk.ttk.Button(file_container, command=self.get_directory_click)
-        self.b_getDir.configure(text="Open Dir.")
-        self.b_getDir.grid(row=0, column=2, sticky=W)
+        # This button is no longer needed
+        #self.b_getDir = tk.ttk.Button(file_container, command=self.get_directory_click)
+        #self.b_getDir.configure(text="Open Dir.")
+        #self.b_getDir.grid(row=0, column=2, sticky=W)
         # Open file
         self.b_getFile = tk.ttk.Button(file_container, command=self.get_images_click)
         self.b_getFile.configure(text="Open Files")
         self.b_getFile.grid(row=0, column=3, sticky=W)
-        # Sample properties
-        # Used as metadata in save dataframe
-        self.sample_props =  OrderedDict([
-                           ('growth_date',
-                             {'label':'Growth Date:',
-                              'default_val':'yyyy-m-dd',
-                              'type':'Entry',
-                              'dtype':'string'}),
-                           ('material',
-                             {'label':'Material (Sep by /):',
-                              'default_val':'TPBi',
-                              'type':'Entry',
-                              'dtype':'string'}),
-                           ('thickness_nm',
-                             {'label':'Thickness (nm) (Sep by /):',
-                              'default_val':'30',
-                              'type':'Entry',
-                              'dtype':'float'}),
-                           ('deposition_rate_aps',
-                             {'label':'Deposition Rate (A/s):',
-                              'default_val':'1',
-                              'type':'Entry',
-                              'dtype':'float'}),
-                           ('deposition_temp_c',
-                             {'label':'Deposition Temp (C):',
-                              'default_val':'25',
-                              'type':'Entry',
-                              'dtype':'float'}),
-                           ('anneal_temp_c',
-                             {'label':'Anneal Temp (C):',
-                              'default_val':'165',
-                              'type':'Entry',
-                              'dtype':'float'}),
-                           ('substrate',
-                             {'label':'Substrate:',
-                              'default_val':'Si',
-                              'type':'Entry',
-                              'dtype':'string'}),
-                           ('note',
-                             {'label':'Note:',
-                              'default_val':'None',
-                              'type':'Entry',
-                              'dtype':'string'})
-                           ])
-        self.s_sample_props={}
-        self.e_sample_props = ['']*len(self.sample_props)
-        row_idx=0
-        for key,input_dict in self.sample_props.items():
-            tk.Label(sample_props_container,text=input_dict['label']).grid(row=row_idx,column=0)
-            self.s_sample_props[key] = tk.StringVar()
-            self.s_sample_props[key].set(input_dict['default_val'])
-            if input_dict['type']=='Entry':
-                self.e_sample_props[row_idx] = tk.Entry(sample_props_container,
-                                             textvariable=self.s_sample_props[key],width=10)
-            # If this is a lock-in test and an option menu is selected,
-            # populate the options via lockinSettingsOptions
-            # and call command to write setting
-            elif input_dict['type']=='OptionMenu':
-                self.e_sample_props[row_idx]=tk.OptionMenu(
-                                        sample_props_container,
-                                        self.s_sample_props[key],
-                                        *self.sample_props[key]['options'])
-            self.e_sample_props[row_idx].grid(row=row_idx,column=1)
-            row_idx+=1
-        # self.l_sample_props = ['']*len(labels)
-        # self.e_sample_props = ['']*len(labels)
-        # self.s_sample_props = ['']*len(labels)
-        # for index,label in enumerate(labels):
-            # self.l_sample_props[index] = tk.Label(sample_props_container, text=label)
-            # self.l_sample_props[index].grid(row=index, column=0, sticky=W)
-            # self.s_sample_props[index] = tk.StringVar()
-            # self.s_sample_props[index].set(defaults[index])
-            # self.e_sample_props[index] = tk.Entry(
-                                        # sample_props_container,
-                                        # textvariable=self.s_sample_props[index])
-            # self.e_sample_props[index].grid(row=index,column=1)
-
+        # Set-up sample properties:
+        self.configure_sample_props()
         # Crop region plot
         self.fig, self.ax = plt.subplots(ncols=2,figsize=(7,2.5),
                                      gridspec_kw = {'width_ratios':[1, 1.1]})
@@ -359,58 +314,151 @@ class GrowthRateAnalyzer(tk.ttk.Frame):
                                 *['Date Modified','Filename (time=*s)'])
         self.e_time_source.grid(row=1,column=2)
 
+        tk.Label(crop_container,text="Edge Det. Method:").grid(row=1,column=3)
+        self.s_edge_method=tk.StringVar()
+        self.s_edge_method.set('Subtract Images')
+        self.e_edge_method=tk.OptionMenu(crop_container,self.s_edge_method,
+                           *['Subtract Images','Threshold Grain'],
+                           command=self.set_edge_method)
+        self.e_edge_method.grid(row=1,column=3)
+        
         self.b_extract_growth = tk.ttk.Button(crop_container, command=self.extract_growth_rates)
         self.b_extract_growth.configure(text="Extract Growth Rates")
-        self.b_extract_growth.grid(row=1, column=3, sticky=E)
+        self.b_extract_growth.grid(row=1, column=4, sticky=E)
 
         self.b_pick_df = tk.ttk.Button(crop_container, command=self.pick_df)
         self.b_pick_df.configure(text="Pick DF")
-        self.b_pick_df.grid(row=1, column=4, sticky=W)
+        self.b_pick_df.grid(row=1, column=5, sticky=W)
 
         self.b_save_results = tk.ttk.Button(crop_container, command=self.save_results)
         self.b_save_results.configure(text="Save Results")
-        self.b_save_results.grid(row=1, column=5, sticky=W)
+        self.b_save_results.grid(row=1, column=6, sticky=W)
+        
+        self.configure_subtract_fig()
+
+        self.pack(fill=BOTH, expand=1)
+
+    def configure_sample_props(self):
+        # Sample properties
+        # Used as metadata in save dataframe
+        self.sample_props =  OrderedDict([
+                           ('growth_date',
+                             {'label':'Growth Date:',
+                              'default_val':'yyyy-m-dd',
+                              'type':'Entry',
+                              'dtype':'string'}),
+                           ('material',
+                             {'label':'Material (Sep by /):',
+                              'default_val':'TPBi',
+                              'type':'Entry',
+                              'dtype':'string'}),
+                           ('thickness_nm',
+                             {'label':'Thickness (nm) (Sep by /):',
+                              'default_val':'30',
+                              'type':'Entry',
+                              'dtype':'float'}),
+                           ('deposition_rate_aps',
+                             {'label':'Deposition Rate (A/s):',
+                              'default_val':'1',
+                              'type':'Entry',
+                              'dtype':'float'}),
+                           ('deposition_temp_c',
+                             {'label':'Deposition Temp (C):',
+                              'default_val':'25',
+                              'type':'Entry',
+                              'dtype':'float'}),
+                           ('anneal_temp_c',
+                             {'label':'Anneal Temp (C):',
+                              'default_val':'165',
+                              'type':'Entry',
+                              'dtype':'float'}),
+                           ('substrate',
+                             {'label':'Substrate:',
+                              'default_val':'Si',
+                              'type':'Entry',
+                              'dtype':'string'}),
+                           ('note',
+                             {'label':'Note:',
+                              'default_val':'None',
+                              'type':'Entry',
+                              'dtype':'string'})
+                           ])
+        self.s_sample_props={}
+        self.e_sample_props = ['']*len(self.sample_props)
+        row_idx=0
+        for key,input_dict in self.sample_props.items():
+            tk.Label(self.sample_props_container,text=input_dict['label']).grid(row=row_idx,column=0)
+            self.s_sample_props[key] = tk.StringVar()
+            self.s_sample_props[key].set(input_dict['default_val'])
+            if input_dict['type']=='Entry':
+                self.e_sample_props[row_idx] = tk.Entry(self.sample_props_container,
+                                             textvariable=self.s_sample_props[key],width=10)
+            elif input_dict['type']=='OptionMenu':
+                self.e_sample_props[row_idx]=tk.OptionMenu(
+                                        self.sample_props_container,
+                                        self.s_sample_props[key],
+                                        *self.sample_props[key]['options'])
+            self.e_sample_props[row_idx].grid(row=row_idx,column=1)
+            row_idx+=1
+        # self.l_sample_props = ['']*len(labels)
+        # self.e_sample_props = ['']*len(labels)
+        # self.s_sample_props = ['']*len(labels)
+        # for index,label in enumerate(labels):
+            # self.l_sample_props[index] = tk.Label(self.sample_props_container, text=label)
+            # self.l_sample_props[index].grid(row=index, column=0, sticky=W)
+            # self.s_sample_props[index] = tk.StringVar()
+            # self.s_sample_props[index].set(defaults[index])
+            # self.e_sample_props[index] = tk.Entry(
+                                        # self.sample_props_container,
+                                        # textvariable=self.s_sample_props[index])
+            # self.e_sample_props[index].grid(row=index,column=1)
+    def configure_threshold_fig(self):
+        # Destroy previous elements in these frames
+        for child in self.threshold_container.winfo_children():
+            child.destroy()
+        for child in self.threshold_plot_container.winfo_children():
+            child.destroy()
         # Threshold figure
         self.threshold_fig,self.threshold_ax = plt.subplots(ncols=4,
                                                       figsize=(10,2.5))
         self.threshold_fig.subplots_adjust(wspace=0.3,top=0.8)
         self.threshold_canvas = FigureCanvasTkAgg(
                                     self.threshold_fig,
-                                    master=threshold_plot_container)
+                                    master=self.threshold_plot_container)
         self.threshold_canvas.draw()
         self.threshold_canvas.get_tk_widget().pack(fill = BOTH, expand = True)
-        #self.toolbar = NavigationToolbar2Tk(self.threshold_canvas, threshold_plot_container)
+        #self.toolbar = NavigationToolbar2Tk(self.threshold_canvas, self.threshold_plot_container)
         #self.toolbar.update()
-        tk.Label(threshold_container,text="Threshold").grid(row=1,column=0)
-        tk.Label(threshold_container,text="Lower").grid(row=0,column=1)
-        tk.Label(threshold_container,text="Upper").grid(row=0,column=2)
-        tk.Label(threshold_container,text="Disk").grid(row=0,column=3)
-        tk.Label(threshold_container,text="Inv. Thresh?").grid(row=0,column=4)
-        tk.Label(threshold_container,text="Multi Ranges?").grid(row=0,column=5)
-        tk.Label(threshold_container,text="Eq. Hist?").grid(row=0,column=6)
-        tk.Label(threshold_container,text="Clip Limit").grid(row=0,column=7)
+        tk.Label(self.threshold_container,text="Threshold").grid(row=1,column=0)
+        tk.Label(self.threshold_container,text="Lower").grid(row=0,column=1)
+        tk.Label(self.threshold_container,text="Upper").grid(row=0,column=2)
+        tk.Label(self.threshold_container,text="Disk").grid(row=0,column=3)
+        tk.Label(self.threshold_container,text="Inv. Thresh?").grid(row=0,column=4)
+        tk.Label(self.threshold_container,text="Multi Ranges?").grid(row=0,column=5)
+        tk.Label(self.threshold_container,text="Eq. Hist?").grid(row=0,column=6)
+        tk.Label(self.threshold_container,text="Clip Limit").grid(row=0,column=7)
 
         self.s_threshold_lower=tk.StringVar()
         self.s_threshold_lower.set('60')
-        self.e_s_threshold_lower=tk.Entry(threshold_container,
+        self.e_s_threshold_lower=tk.Entry(self.threshold_container,
                                    textvariable=self.s_threshold_lower,width=5)
         self.e_s_threshold_lower.grid(row=1,column=1)
 
         self.s_threshold_upper=tk.StringVar()
         self.s_threshold_upper.set('70')
-        self.e_s_threshold_upper=tk.Entry(threshold_container,
+        self.e_s_threshold_upper=tk.Entry(self.threshold_container,
                                    textvariable=self.s_threshold_upper,width=5)
         self.e_s_threshold_upper.grid(row=1,column=2)
 
         self.s_disk=tk.StringVar()
         self.s_disk.set('5')
-        self.e_disk=tk.Entry(threshold_container,textvariable=self.s_disk,width=5)
+        self.e_disk=tk.Entry(self.threshold_container,textvariable=self.s_disk,width=5)
         self.e_disk.grid(row=1,column=3)
 
         self.bool_threshold_out = tk.BooleanVar()
         self.bool_threshold_out.set(False)
         self.e_threshold_out = tk.Checkbutton(
-                                threshold_container,
+                                self.threshold_container,
                                 variable=self.bool_threshold_out,
                                 onvalue=True,offvalue=False)
         self.e_threshold_out.grid(row=1,column=4)
@@ -418,14 +466,14 @@ class GrowthRateAnalyzer(tk.ttk.Frame):
         self.bool_multi_ranges = tk.BooleanVar()
         self.bool_multi_ranges.set(False)
         self.e_multi_ranges = tk.Checkbutton(
-                                threshold_container,
+                                self.threshold_container,
                                 variable=self.bool_multi_ranges,
                                 onvalue=True,offvalue=False)
         self.e_multi_ranges.grid(row=1,column=5)
 
         self.bool_eq_hist = tk.BooleanVar()
         self.bool_eq_hist.set(True)
-        self.e_eq_hist = tk.Checkbutton(threshold_container,variable=self.bool_eq_hist,
+        self.e_eq_hist = tk.Checkbutton(self.threshold_container,variable=self.bool_eq_hist,
                                   onvalue = True, offvalue = False,
                                   command=self.eq_hist_cb_command)
         self.e_eq_hist.grid(row=1,column=6)
@@ -433,15 +481,15 @@ class GrowthRateAnalyzer(tk.ttk.Frame):
         self.s_clip_limit = tk.StringVar()
         self.s_clip_limit.set('0.05')
         self.last_clip_limit=self.s_clip_limit.get()
-        self.e_clip_limit = tk.Entry(threshold_container,textvariable=self.s_clip_limit,width=5)
+        self.e_clip_limit = tk.Entry(self.threshold_container,textvariable=self.s_clip_limit,width=5)
         self.e_clip_limit.grid(row=1,column=7)
 
-        self.b_clear_ranges = tk.ttk.Button(threshold_container,
+        self.b_clear_ranges = tk.ttk.Button(self.threshold_container,
                                     command=self.clear_threshold_ranges)
         self.b_clear_ranges.configure(text="Clear Ranges")
         self.b_clear_ranges.grid(row=1, column=8, sticky=W)
 
-        self.b_check_threshold = tk.ttk.Button(threshold_container,
+        self.b_check_threshold = tk.ttk.Button(self.threshold_container,
                                     command=self.check_threshold)
         self.b_check_threshold.configure(text="Check Threshold")
         self.b_check_threshold.grid(row=1, column=9, sticky=W)
@@ -491,9 +539,71 @@ class GrowthRateAnalyzer(tk.ttk.Frame):
         # Span selector for threshold range
         self.span = SpanSelector(self.threshold_ax[3], onselect, 'horizontal', useblit=True,
                             rectprops=dict(alpha=0.5, facecolor=(55/255,126/255,184/255)))
+    
+    def configure_subtract_fig(self):
+        # Destroy previous elements in these frames
+        for child in self.threshold_container.winfo_children():
+            child.destroy()
+        for child in self.threshold_plot_container.winfo_children():
+            child.destroy()
+        #Figure
+        self.threshold_fig,self.threshold_ax = plt.subplots(ncols=4,
+                                                      figsize=(10,2.5))
+        self.threshold_fig.subplots_adjust(wspace=0.3,top=0.8)
+        self.threshold_canvas = FigureCanvasTkAgg(
+                                    self.threshold_fig,
+                                    master=self.threshold_plot_container)
+        self.threshold_canvas.draw()
+        self.threshold_canvas.get_tk_widget().pack(fill = BOTH, expand = True)
+        #Subtraction parameters
+        tk.Label(self.threshold_container,text="Threshold?").grid(row=0,column=0)
+        tk.Label(self.threshold_container,text="Lower").grid(row=0,column=1)
+        tk.Label(self.threshold_container,text="Disk").grid(row=0,column=2)
+        tk.Label(self.threshold_container,text="Eq. Hist?").grid(row=0,column=3)
+        tk.Label(self.threshold_container,text="Clip Limit").grid(row=0,column=4)
 
-        self.pack(fill=BOTH, expand=1)
+        self.bool_threshold_on = tk.BooleanVar()
+        self.bool_threshold_on.set(False)
+        self.e_threshold_on = tk.Checkbutton(
+                                self.threshold_container,
+                                variable=self.bool_threshold_on,
+                                onvalue=True,offvalue=False)
+        self.e_threshold_on.grid(row=1,column=0)
+        
+        self.s_threshold_lower=tk.StringVar()
+        self.s_threshold_lower.set('0.1')
+        self.e_s_threshold_lower=tk.Entry(self.threshold_container,
+                                   textvariable=self.s_threshold_lower,width=5)
+        self.e_s_threshold_lower.grid(row=1,column=1)
 
+        self.s_disk=tk.StringVar()
+        self.s_disk.set('5')
+        self.e_disk=tk.Entry(self.threshold_container,textvariable=self.s_disk,width=5)
+        self.e_disk.grid(row=1,column=2)
+        
+        self.bool_eq_hist = tk.BooleanVar()
+        self.bool_eq_hist.set(False)
+        self.e_eq_hist = tk.Checkbutton(self.threshold_container,variable=self.bool_eq_hist,
+                                  onvalue = True, offvalue = False,
+                                  command=self.eq_hist_cb_command)
+        self.e_eq_hist.grid(row=1,column=3)
+
+        self.s_clip_limit = tk.StringVar()
+        self.s_clip_limit.set('0.05')
+        self.last_clip_limit=self.s_clip_limit.get()
+        self.e_clip_limit = tk.Entry(self.threshold_container,textvariable=self.s_clip_limit,width=5)
+        self.e_clip_limit.grid(row=1,column=4)
+
+        self.b_check_threshold = tk.ttk.Button(self.threshold_container,
+                                    command=self.check_subtraction)
+        self.b_check_threshold.configure(text="Check Subtraction")
+        self.b_check_threshold.grid(row=1, column=9, sticky=W)
+        
+    def set_edge_method(self,val):
+        if self.s_edge_method.get()=='Subtract Images':
+            self.configure_subtract_fig()
+        elif self.s_edge_method.get()=='Threshold Grain':
+            self.configure_threshold_fig()
     def get_directory_click(self):
         self.t_file_dir.delete("1.0",END)
         self.base_dir = askdirectory(initialdir=self.base_dir)
@@ -630,7 +740,7 @@ class GrowthRateAnalyzer(tk.ttk.Frame):
                 [b.remove() for b in self.threshold_plot_data[3][2]]
             except:
                 pass
-        if self.bool_multi_ranges:
+        if self.bool_multi_ranges.get():
             threshold_lower = [float(x) for x in
                             self.s_threshold_lower.get().split(',')]
             threshold_upper = [float(x) for x in
@@ -671,26 +781,90 @@ class GrowthRateAnalyzer(tk.ttk.Frame):
         self.threshold_initialized = True
         self.last_clip_limit=self.s_clip_limit.get()
 
-    def draw_line_segments(self):
-        if self.bool_multi_ranges:
-            threshold_lower = [float(x) for x in
-                            self.s_threshold_lower.get().split(',')]
-            threshold_upper = [float(x) for x in
-                            self.s_threshold_upper.get().split(',')]
-        else:
+    def check_subtraction(self):
+        if not self.s_clip_limit.get() == self.last_clip_limit:
+            self.threshold_initialized=False
+            [b.remove() for b in self.threshold_plot_data[3][2]]
+        if not self.threshold_initialized:
+            self.original_image=misc.imread(os.path.join(self.base_dir,
+                                                  self.time_files[-1]),
+                                      mode='L')
+            try:
+                [b.remove() for b in self.threshold_plot_data[3][2]]
+            except:
+                pass
+        if self.bool_threshold_on.get():
             threshold_lower = float(self.s_threshold_lower.get())
-            threshold_upper = float(self.s_threshold_upper.get())
-        denoised = threshold_crop_denoise(
-                                      self.time_files[-1],
-                                      self.x1,self.x2,self.y1,self.y2,
-                                      threshold_lower,
-                                      threshold_upper,
-                                      int(self.s_disk.get()),
-                                      equalize_hist=self.bool_eq_hist.get(),
-                                      multiple_ranges=self.bool_multi_ranges.get(),
-                                      threshold_out=self.bool_threshold_out.get(),
-                                      clip_limit=float(self.s_clip_limit.get())
-                                      )[0]
+        else:
+            threshold_lower = None
+        denoised,thresholded,subtraction,cropped = subtract_and_denoise(
+                                        self.time_files[-2],
+                                        self.time_files[-1],
+                                        self.x1,self.x2,self.y1,self.y2,
+                                        int(self.s_disk.get()),
+                                        threshold=threshold_lower,
+                                        equalize_hist=self.bool_eq_hist.get(),
+                                        clip_limit=float(self.s_clip_limit.get()))
+
+        if not self.threshold_initialized:
+            self.threshold_plot_data = ['']*4
+            self.threshold_plot_data[0] = self.threshold_ax[0].imshow(cropped,cmap=plt.get_cmap('gray'))
+            self.threshold_plot_data[1] = self.threshold_ax[1].imshow(thresholded,cmap=plt.get_cmap('gray'))
+            self.threshold_plot_data[2] = self.threshold_ax[2].imshow(denoised,cmap=plt.get_cmap('gray'))
+            # Plot the histogram so we can select a good threshold for the grains
+            self.threshold_plot_data[3]=self.threshold_ax[3].hist(
+                    subtraction.ravel(),bins=100,alpha=0.8,
+                    color=(228/255,26/255,28/255))
+            self.threshold_ax[3].set_yscale('log')
+            # Set subplot titles
+            self.threshold_ax[0].set_title('Original Image')
+            self.threshold_ax[2].set_title('Despeckled')
+            self.threshold_ax[3].set_title('Subtraction Histogram')
+        elif self.threshold_initialized:
+            set_new_im_data(self.threshold_ax[1],self.threshold_plot_data[1],thresholded)
+            set_new_im_data(self.threshold_ax[2],self.threshold_plot_data[2],denoised)
+        if self.bool_threshold_on.get():
+            self.threshold_ax[1].set_title('Thresholded above \n' + self.s_threshold_lower.get())
+        else:
+            self.threshold_ax[1].set_title('Subtraction')
+        self.threshold_canvas.draw()
+        self.threshold_initialized = True
+        self.last_clip_limit=self.s_clip_limit.get()
+    
+    def draw_line_segments(self):
+        if self.s_edge_method.get() == "Threshold Grain":
+            if self.bool_multi_ranges:
+                threshold_lower = [float(x) for x in
+                                self.s_threshold_lower.get().split(',')]
+                threshold_upper = [float(x) for x in
+                                self.s_threshold_upper.get().split(',')]
+            else:
+                threshold_lower = float(self.s_threshold_lower.get())
+                threshold_upper = float(self.s_threshold_upper.get())
+            denoised = threshold_crop_denoise(
+                                          self.time_files[-1],
+                                          self.x1,self.x2,self.y1,self.y2,
+                                          threshold_lower,
+                                          threshold_upper,
+                                          int(self.s_disk.get()),
+                                          equalize_hist=self.bool_eq_hist.get(),
+                                          multiple_ranges=self.bool_multi_ranges.get(),
+                                          threshold_out=self.bool_threshold_out.get(),
+                                          clip_limit=float(self.s_clip_limit.get())
+                                          )[0]
+        elif self.s_edge_method.get() == "Subtract Images":
+            if self.bool_threshold_on.get():
+                threshold_lower = float(self.s_threshold_lower.get())
+            else:
+                threshold_lower = None
+            denoised = subtract_and_denoise(
+                                            self.time_files[-2],
+                                            self.time_files[-1],
+                                            self.x1,self.x2,self.y1,self.y2,
+                                            int(self.s_disk.get()),
+                                            threshold=threshold_lower,
+                                            equalize_hist=self.bool_eq_hist.get(),
+                                            clip_limit=float(self.s_clip_limit.get()))[0]
         # Remove old lines
         for line in self.ax[0].lines:
             line.remove()
@@ -810,16 +984,26 @@ class GrowthRateAnalyzer(tk.ttk.Frame):
         filesToPlot = self.time_files
         time_list = self.times
         sort_indices = sorted(range(len(time_list)), key=lambda k: time_list[k])
-        self.distances = np.zeros((len(self.lines),len(sort_indices)))
-        if self.bool_multi_ranges:
-            threshold_lower = [float(x) for x in
-                            self.s_threshold_lower.get().split(',')]
-            threshold_upper = [float(x) for x in
-                            self.s_threshold_upper.get().split(',')]
-        else:
-            threshold_lower = float(self.s_threshold_lower.get())
-            threshold_upper = float(self.s_threshold_upper.get())
-
+        if self.s_edge_method.get()=='Threshold Grain':
+            if self.bool_multi_ranges:
+                threshold_lower = [float(x) for x in
+                                self.s_threshold_lower.get().split(',')]
+                threshold_upper = [float(x) for x in
+                                self.s_threshold_upper.get().split(',')]
+            else:
+                threshold_lower = float(self.s_threshold_lower.get())
+                threshold_upper = float(self.s_threshold_upper.get())
+            self.distances = np.zeros((len(self.lines),len(sort_indices)))
+        elif self.s_edge_method.get()=='Subtract Images':
+            if self.bool_threshold_on.get():
+                threshold_lower = float(self.s_threshold_lower.get())
+            else:
+                threshold_lower = None
+            # Make distance and times array smaller in length by one element,
+            # since subtraction reduces the number of datapoints by one
+            self.distances = np.zeros((len(self.lines),len(sort_indices)-1))
+            self.times.remove(max(self.times))
+            sort_indices = sort_indices[:-1]
         for idx,sort_idx in enumerate(sort_indices):
             timeFile = filesToPlot[sort_idx]
             if idx==0:
@@ -827,35 +1011,48 @@ class GrowthRateAnalyzer(tk.ttk.Frame):
                 ti=0
             else:
                 ti = self.times[sort_idx]-t0
-            denoised = threshold_crop_denoise(self.time_files[sort_idx],
-                                          self.x1,self.x2,self.y1,self.y2,
-                                          threshold_lower,
-                                          threshold_upper,
-                                          int(self.s_disk.get()),
-                                          equalize_hist=self.bool_eq_hist.get(),
-                                          multiple_ranges=self.bool_multi_ranges.get(),
-                                          threshold_out=self.bool_threshold_out.get(),
-                                          clip_limit=float(self.s_clip_limit.get())
-                                          )[0]
-            for idx2 in range(0,len(self.lines)):
-                self.distances[idx2][idx] = get_growth_edge(
-                    denoised,self.lines[idx2],
+            if self.s_edge_method.get()=='Threshold Grain':
+                denoised = threshold_crop_denoise(self.time_files[sort_idx],
+                                              self.x1,self.x2,self.y1,self.y2,
+                                              threshold_lower,
+                                              threshold_upper,
+                                              int(self.s_disk.get()),
+                                              equalize_hist=self.bool_eq_hist.get(),
+                                              multiple_ranges=self.bool_multi_ranges.get(),
+                                              threshold_out=self.bool_threshold_out.get(),
+                                              clip_limit=float(self.s_clip_limit.get())
+                                              )[0]
+            elif self.s_edge_method.get()=='Subtract Images':
+                if sort_idx >= (len(self.times)-1):                      
+                    continue
+                denoised = subtract_and_denoise(
+                                        self.time_files[sort_idx],
+                                        self.time_files[sort_idx+1],
+                                        self.x1,self.x2,self.y1,self.y2,
+                                        int(self.s_disk.get()),
+                                        threshold=threshold_lower,
+                                        equalize_hist=self.bool_eq_hist.get(),
+                                        clip_limit=float(self.s_clip_limit.get()))[0]
+            for line_idx in range(0,len(self.lines)):
+                self.distances[line_idx][idx] = get_growth_edge(
+                    denoised,self.lines[line_idx],
                     length_per_pixel=length_per_pixel
                     )
         self.growth_rates=[]
         self.growth_rates_string=[]
-        for idx,line in enumerate(self.lines):
-            filterIdx = np.where(self.distances[idx]>0)[0]
+        for line_idx,line in enumerate(self.lines):
+            filterIdx = np.where(self.distances[line_idx]>0)[0]
             self.times = np.array(self.times)
             # Fit the data with a line
-            params = np.polyfit(self.times[filterIdx], self.distances[idx][filterIdx], 1)
+            params = np.polyfit(self.times[filterIdx], self.distances[line_idx][filterIdx], 1)
             self.ax[1].plot(self.times,np.array(self.times)*params[0]+params[1],'--k',linewidth=1.5)
             self.ax[1].set_xlabel('Time (s)')
             self.ax[1].set_ylabel('Grain Radius ($\mu$m)')
             print('{:.2f}'.format(params[0])+' micron/sec')
             self.growth_rates_string.append('{:.2f}'.format(params[0])+' micron/sec')
             self.growth_rates.append(params[0])
-            self.ax[1].plot(self.times,self.distances[idx],'o',label='#' + str(idx+1) + ', ' + '{:.2f}'.format(params[0])+' $\mu$m/s')
+            self.ax[1].plot(self.times,self.distances[line_idx],'o',
+                label='#' + str(line_idx+1) + ', ' + '{:.2f}'.format(params[0])+' $\mu$m/s')
         self.legend = self.ax[1].legend(bbox_to_anchor=(1.0, 1.0))
         # Re-evaluate limits
         self.ax[1].relim()
