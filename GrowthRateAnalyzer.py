@@ -47,7 +47,7 @@ from matplotlib.widgets import SpanSelector
 from matplotlib.ticker import AutoMinorLocator, MaxNLocator
 from matplotlib.patches import Rectangle
 # Colors
-from palettable.tableau import Tableau_10
+from palettable.tableau import Tableau_10, Tableau_20
 from palettable.colorbrewer.qualitative import Set1_9
 # local code imports
 from oledpy import image_helper
@@ -564,7 +564,7 @@ class GrowthRateAnalyzer(tk.ttk.Frame):
         tk.Label(self.threshold_container,text="Clip Limit").grid(row=0,column=4)
 
         self.bool_threshold_on = tk.BooleanVar()
-        self.bool_threshold_on.set(False)
+        self.bool_threshold_on.set(True)
         self.e_threshold_on = tk.Checkbutton(
                                 self.threshold_container,
                                 variable=self.bool_threshold_on,
@@ -572,13 +572,13 @@ class GrowthRateAnalyzer(tk.ttk.Frame):
         self.e_threshold_on.grid(row=1,column=0)
         
         self.s_threshold_lower=tk.StringVar()
-        self.s_threshold_lower.set('0.1')
+        self.s_threshold_lower.set('0.05')
         self.e_s_threshold_lower=tk.Entry(self.threshold_container,
                                    textvariable=self.s_threshold_lower,width=5)
         self.e_s_threshold_lower.grid(row=1,column=1)
 
         self.s_disk=tk.StringVar()
-        self.s_disk.set('5')
+        self.s_disk.set('8')
         self.e_disk=tk.Entry(self.threshold_container,textvariable=self.s_disk,width=5)
         self.e_disk.grid(row=1,column=2)
         
@@ -605,6 +605,7 @@ class GrowthRateAnalyzer(tk.ttk.Frame):
             self.configure_subtract_fig()
         elif self.s_edge_method.get()=='Threshold Grain':
             self.configure_threshold_fig()
+        self.threshold_initialized=False
     def get_directory_click(self):
         self.t_file_dir.delete("1.0",END)
         self.base_dir = askdirectory(initialdir=self.base_dir)
@@ -770,6 +771,7 @@ class GrowthRateAnalyzer(tk.ttk.Frame):
             self.threshold_plot_data[3]=self.threshold_ax[3].hist(
                     cropped.ravel(),bins=256,alpha=0.8,
                     color=(228/255,26/255,28/255))
+            self.threshold_ax[3].autoscale()
             # Set subplot titles
             self.threshold_ax[0].set_title('Original Image')
             self.threshold_ax[2].set_title('Despeckled')
@@ -1039,27 +1041,32 @@ class GrowthRateAnalyzer(tk.ttk.Frame):
                     )
         self.growth_rates=[]
         self.growth_rates_string=[]
+        c_idx=-1
         for line_idx,line in enumerate(self.lines):
+            c_idx +=1
+            if c_idx>9:
+                c_idx=0
             # print(self.times)
             # print(self.distances)
             # x,y,filterIdx=cleanSignal_curvature(self.times,self.distances[line_idx],
                                # curvature_threshold = 0.004,
                                # return_index=True,remove_less_than=1)
             # print(filterIdx)
-            # Filter out points that are less than 10% of the mean, or 10% greater than the last point
+            # Filter out points that are less than 10% of the mean, or 5% greater than the last point
             filterIdx = np.where(np.logical_and(
                 self.distances[line_idx]>np.mean(self.distances[line_idx])*0.1,
-                self.distances[line_idx]<self.distances[line_idx][-1]*1.1))[0]
+                self.distances[line_idx]<self.distances[line_idx][-1]*1.05))[0]
             self.times = np.array(self.times)
             # Fit the data with a line
             params = np.polyfit(self.times[filterIdx], self.distances[line_idx][filterIdx], 1)
-            self.ax[1].plot(self.times,np.array(self.times)*params[0]+params[1],'--k',linewidth=1.5)
+            self.ax[1].plot(self.times,np.array(self.times)*params[0]+params[1],'--',
+                color=Tableau_10.mpl_colors[c_idx],linewidth=1.5)
             self.ax[1].set_xlabel('Time (s)')
             self.ax[1].set_ylabel('Grain Radius ($\mu$m)')
             print('{:.2f}'.format(params[0])+' micron/sec')
             self.growth_rates_string.append('{:.2f}'.format(params[0])+' micron/sec')
             self.growth_rates.append(params[0])
-            self.ax[1].plot(self.times,self.distances[line_idx],'o',
+            self.ax[1].plot(self.times,self.distances[c_idx],'o',color=Tableau_10.mpl_colors[line_idx],
                 label='#' + str(line_idx+1) + ', ' + '{:.2f}'.format(params[0])+' $\mu$m/s')
         self.legend = self.ax[1].legend(bbox_to_anchor=(1.0, 1.0))
         # Re-evaluate limits
