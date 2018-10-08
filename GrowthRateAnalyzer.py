@@ -51,6 +51,7 @@ from palettable.tableau import Tableau_10
 from palettable.colorbrewer.qualitative import Set1_9
 # local code imports
 from oledpy import image_helper
+from oledpy import cleanSignal_curvature
 
 #plt.style.use('ggplot')
 # styleDir = os.path.join(os.path.expanduser('~'),
@@ -1023,8 +1024,6 @@ class GrowthRateAnalyzer(tk.ttk.Frame):
                                               clip_limit=float(self.s_clip_limit.get())
                                               )[0]
             elif self.s_edge_method.get()=='Subtract Images':
-                if sort_idx >= (len(self.times)-1):                      
-                    continue
                 denoised = subtract_and_denoise(
                                         self.time_files[sort_idx],
                                         self.time_files[sort_idx+1],
@@ -1041,7 +1040,16 @@ class GrowthRateAnalyzer(tk.ttk.Frame):
         self.growth_rates=[]
         self.growth_rates_string=[]
         for line_idx,line in enumerate(self.lines):
-            filterIdx = np.where(self.distances[line_idx]>0)[0]
+            # print(self.times)
+            # print(self.distances)
+            # x,y,filterIdx=cleanSignal_curvature(self.times,self.distances[line_idx],
+                               # curvature_threshold = 0.004,
+                               # return_index=True,remove_less_than=1)
+            # print(filterIdx)
+            # Filter out points that are less than 10% of the mean, or 10% greater than the last point
+            filterIdx = np.where(np.logical_and(
+                self.distances[line_idx]>np.mean(self.distances[line_idx])*0.1,
+                self.distances[line_idx]<self.distances[line_idx][-1]*1.1))[0]
             self.times = np.array(self.times)
             # Fit the data with a line
             params = np.polyfit(self.times[filterIdx], self.distances[line_idx][filterIdx], 1)
