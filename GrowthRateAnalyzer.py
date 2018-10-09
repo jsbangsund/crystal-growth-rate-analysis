@@ -1041,6 +1041,7 @@ class GrowthRateAnalyzer(tk.ttk.Frame):
                     )
         self.growth_rates=[]
         self.growth_rates_string=[]
+        self.growth_lines=['']*len(self.lines)
         c_idx=-1
         for line_idx,line in enumerate(self.lines):
             c_idx +=1
@@ -1066,13 +1067,44 @@ class GrowthRateAnalyzer(tk.ttk.Frame):
             print('{:.2f}'.format(params[0])+' micron/sec')
             self.growth_rates_string.append('{:.2f}'.format(params[0])+' micron/sec')
             self.growth_rates.append(params[0])
-            self.ax[1].plot(self.times,self.distances[c_idx],'o',color=Tableau_10.mpl_colors[line_idx],
+            self.growth_lines[line_idx],=self.ax[1].plot(self.times,self.distances[c_idx],'o',color=Tableau_10.mpl_colors[line_idx],
                 label='#' + str(line_idx+1) + ', ' + '{:.2f}'.format(params[0])+' $\mu$m/s')
-        self.legend = self.ax[1].legend(bbox_to_anchor=(1.0, 1.0))
+        self.legend = self.ax[1].legend(bbox_to_anchor=(1.0, 1.0),
+                    title='click line to remove')
         # Re-evaluate limits
         self.ax[1].relim()
         self.canvas.draw()
         self.label_lines()
+        # # we will set up a dict mapping legend line to orig line, and enable
+        # # picking on the legend line
+        # lined = dict()
+        # for legline, origline in zip(self.legend.get_lines(), self.growth_lines):
+            # legline.set_picker(5)  # 5 pts tolerance
+            # lined[legline] = origline
+
+        # print(self.distances.shape)
+        # def onpick(event):
+            # # on the pick event, find the orig line corresponding to the
+            # # legend proxy line, and toggle the visibility
+            # legline = event.artist
+            # print(legline)
+            # origline = lined[legline]
+            # self.distances = np.delete(self.distances,legline,axis=0)
+            # print(self.distances.shape)
+            # self.ax[1].lines.remove(self.growth_lines[legline])
+            
+            # #vis = not origline.get_visible()
+            # #origline.set_visible(vis)
+            # # Change the alpha on the line in the legend so we can see what lines
+            # # have been toggled
+            # #if vis:
+            # #    legline.set_alpha(1.0)
+            # #else:
+            # #    legline.set_alpha(0.2)
+            # #self.fig.canvas.draw()
+            # #self.canvas.draw()
+
+        # self.fig.canvas.mpl_connect('pick_event', onpick)
 
     def save_results(self):
         # Make save directory
