@@ -1041,6 +1041,7 @@ class GrowthRateAnalyzer(tk.ttk.Frame):
                     )
         self.growth_rates=[]
         self.growth_rates_string=[]
+        self.growth_lines_fit=['']*len(self.lines)
         self.growth_lines=['']*len(self.lines)
         c_idx=-1
         for line_idx,line in enumerate(self.lines):
@@ -1060,8 +1061,9 @@ class GrowthRateAnalyzer(tk.ttk.Frame):
             self.times = np.array(self.times)
             # Fit the data with a line
             params = np.polyfit(self.times[filterIdx], self.distances[line_idx][filterIdx], 1)
-            self.ax[1].plot(self.times,np.array(self.times)*params[0]+params[1],'--',
+            line1,=self.ax[1].plot(self.times,np.array(self.times)*params[0]+params[1],'--',
                 color=Tableau_10.mpl_colors[c_idx],linewidth=1.5)
+            self.growth_lines_fit.append(line1)
             self.ax[1].set_xlabel('Time (s)')
             self.ax[1].set_ylabel('Grain Radius ($\mu$m)')
             print('{:.2f}'.format(params[0])+' micron/sec')
@@ -1071,40 +1073,14 @@ class GrowthRateAnalyzer(tk.ttk.Frame):
                 label='#' + str(line_idx+1) + ', ' + '{:.2f}'.format(params[0])+' $\mu$m/s')
         self.legend = self.ax[1].legend(bbox_to_anchor=(1.0, 1.0),
                     title='click line to remove')
+        # Need to figure out best way to modify data between the two classes
+        # self.interactive_legend = interactive_legend(
+            # ax=self.ax[1],lines1=self.growth_lines,lines2=self.growth_lines_fit,
+            # data=self.distances)
         # Re-evaluate limits
         self.ax[1].relim()
         self.canvas.draw()
         self.label_lines()
-        # # we will set up a dict mapping legend line to orig line, and enable
-        # # picking on the legend line
-        # lined = dict()
-        # for legline, origline in zip(self.legend.get_lines(), self.growth_lines):
-            # legline.set_picker(5)  # 5 pts tolerance
-            # lined[legline] = origline
-
-        # print(self.distances.shape)
-        # def onpick(event):
-            # # on the pick event, find the orig line corresponding to the
-            # # legend proxy line, and toggle the visibility
-            # legline = event.artist
-            # print(legline)
-            # origline = lined[legline]
-            # self.distances = np.delete(self.distances,legline,axis=0)
-            # print(self.distances.shape)
-            # self.ax[1].lines.remove(self.growth_lines[legline])
-            
-            # #vis = not origline.get_visible()
-            # #origline.set_visible(vis)
-            # # Change the alpha on the line in the legend so we can see what lines
-            # # have been toggled
-            # #if vis:
-            # #    legline.set_alpha(1.0)
-            # #else:
-            # #    legline.set_alpha(0.2)
-            # #self.fig.canvas.draw()
-            # #self.canvas.draw()
-
-        # self.fig.canvas.mpl_connect('pick_event', onpick)
 
     def save_results(self):
         # Make save directory
@@ -1271,7 +1247,108 @@ class LineBuilder:
         self.line.set_data(self.xs, self.ys)
         self.line.figure.canvas.draw()
 
+def interactive_legend(ax=None,lines1=None,lines2=None,data=None):
+    if ax is None:
+        ax = plt.gca()
+    if ax.legend_ is None:
+        ax.legend()
 
+    return InteractiveLegend(ax.legend_,lines1,lines2,data)
+# Class for interactive legend
+# Clicking on legend items removes them from the plot and from the data
+# This allows growth rate fits to be manually removed by user if they are poor quality
+class InteractiveLegend(object):
+    def __init__(self,legend,lines1,lines2,data):
+        self.legend = legend
+        self.fig = legend.axes.figure
+        self.ax = plt.gca()
+        self.lines1 = lines1
+        self.lines2 = lines2
+        self.data = data
+
+        self.lookup_artist, self.lookup_handle = self._build_lookups(legend)
+        self._setup_connections()
+
+        self.update_legend()
+
+    def _setup_connections(self):
+        for artist in self.legend.texts + self.legend.legendHandles:
+            artist.set_picker(10) # 10 points tolerance
+        self.fig.canvas.mpl_connect('pick_event', self.on_pick)
+
+    def _build_lookups(self, legend):
+        labels = [t.get_text() for t in legend.texts]
+        handles = legend.legendHandles
+        label2handle = dict(zip(labels, handles))
+        handle2text = dict(zip(handles, legend.texts))
+
+        lookup_artist = {}
+        lookup_handle = {}
+        for artist in legend.axes.get_children():
+            if artist.get_label() in labels:
+                handle = label2handle[artist.get_label()]
+                lookup_handle[artist] = handle
+                lookup_artist[handle] = artist
+                lookup_artist[handle2text[handle]] = artist
+
+        lookup_handle.update(zip(handles, handles))
+        lookup_handle.update(zip(legend.texts, handles))
+
+        return lookup_artist, lookup_handle
+
+    def on_pick(self, event):
+        handle = event.artist
+        if handle in self.lookup_artist:
+            artist = self.lookup_artist[handle]
+            if not self.lines1==None:
+                line_idx = self.lines1.index(artist)
+                self.data = np.delete(self.data,line_idx,axis=0) # remove data from array
+                self.lines1[line_idx].remove()
+            if not self.lines2==None: # remove companion line
+                self.lines2[line_idx].remove()
+            self.update_legend() # remove line from legend
+    
+    def update_legend(self):
+        import matplotlib as mpl
+
+        l = self.legend
+
+        defaults = dict(
+            loc = l._loc,
+            numpoints = l.numpoints,
+            markerscale = l.markerscale,
+            scatterpoints = l.scatterpoints,
+            scatteryoffsets = l._scatteryoffsets,
+            prop = l.prop,
+            # fontsize = None,
+            borderpad = l.borderpad,
+            labelspacing = l.labelspacing,
+            handlelength = l.handlelength,
+            handleheight = l.handleheight,
+            handletextpad = l.handletextpad,
+            borderaxespad = l.borderaxespad,
+            columnspacing = l.columnspacing,
+            ncol = l._ncol,
+            mode = l._mode,
+            fancybox = type(l.legendPatch.get_boxstyle())==mpl.patches.BoxStyle.Round,
+            shadow = l.shadow,
+            title = l.get_title().get_text() if l._legend_title_box.get_visible() else None,
+            framealpha = l.get_frame().get_alpha(),
+            bbox_to_anchor = l.get_bbox_to_anchor()._bbox,
+            bbox_transform = l.get_bbox_to_anchor()._transform,
+            frameon = l._drawFrame,
+            handler_map = l._custom_handler_map,
+        )
+
+        mpl.pyplot.legend(**defaults)
+        self.legend = self.ax.legend_
+        self.lookup_artist, self.lookup_handle = self._build_lookups(self.legend)
+        self._setup_connections()
+        self.fig.canvas.draw()
+
+    def show(self):
+        plt.show()
+        
 def main():
     root = tk.Tk()
     app = GrowthRateAnalyzer(root)
