@@ -310,7 +310,7 @@ class GrowthRateAnalyzer(tk.ttk.Frame):
 
         tk.Label(crop_container,text="Get time from:").grid(row=1,column=1)
         self.s_time_source = tk.StringVar()
-        self.s_time_source.set('Date Modified')
+        self.s_time_source.set('Filename (time=*s)')
         self.e_time_source = tk.OptionMenu(crop_container,self.s_time_source,
                                 *['Date Modified','Filename (time=*s)'])
         self.e_time_source.grid(row=1,column=2)
@@ -1069,8 +1069,15 @@ class GrowthRateAnalyzer(tk.ttk.Frame):
             print('{:.2f}'.format(params[0])+' micron/sec')
             self.growth_rates_string.append('{:.2f}'.format(params[0])+' micron/sec')
             self.growth_rates.append(params[0])
-            self.growth_lines[line_idx],=self.ax[1].plot(self.times,self.distances[c_idx],'o',color=Tableau_10.mpl_colors[line_idx],
-                label='#' + str(line_idx+1) + ', ' + '{:.2f}'.format(params[0])+' $\mu$m/s')
+            # Make legend label, decide units based on size of value
+            if params[0]>10:
+                label_string = '#' + str(line_idx+1) + ', ' + '{:.1f}'.format(params[0])+' $\mu$m/s'
+            elif params[0]>0.1:
+                label_string = '#' + str(line_idx+1) + ', ' + '{:.2f}'.format(params[0])+' $\mu$m/s'
+            else:
+                label_string = '#' + str(line_idx+1) + ', ' + '{:.1f}'.format(params[0]*1e3)+' nm/s'
+            self.growth_lines[line_idx],=self.ax[1].plot(self.times,self.distances[line_idx],'o',color=Tableau_10.mpl_colors[c_idx],
+                label=label_string)
         self.legend = self.ax[1].legend(bbox_to_anchor=(1.0, 1.0),
                     title='click line to remove')
         # Need to figure out best way to modify data between the two classes
