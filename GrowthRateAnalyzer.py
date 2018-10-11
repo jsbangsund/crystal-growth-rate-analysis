@@ -975,64 +975,17 @@ class GrowthRateAnalyzer(tk.ttk.Frame):
             length_per_pixel = image_width_microns[self.s_mag.get()]/img.shape[1]
         # Check whether image processing settings have changed
         # If not, used stored copies of processed images
-        if self.s_edge_method.get()=='Threshold Grain':
-            if self.bool_multi_ranges:
-                threshold_lower = [float(x) for x in
-                                self.s_threshold_lower.get().split(',')]
-                threshold_upper = [float(x) for x in
-                                self.s_threshold_upper.get().split(',')]
-            else:
-                threshold_lower = float(self.s_threshold_lower.get())
-                threshold_upper = float(self.s_threshold_upper.get())
-            multiple_ranges = self.bool_multi_ranges.get()
-            threshold_out = self.bool_threshold_out.get()
-        elif self.s_edge_method.get()=='Subtract Images':
-            if self.bool_threshold_on.get():
-                threshold_lower = float(self.s_threshold_lower.get())
-            else:
-                threshold_lower = None
-            # Variables that aren't used in this method:
-            threshold_upper = None
-            threshold_out = None
-            multiple_ranges = None
-        current_img_process_settings = {
-                'method':self.s_edge_method.get(),'disk':int(self.s_disk.get()),
-                'threshold_lower':threshold_lower,'threshold_upper':threshold_upper,
-                'crop_region':(self.x1,self.x2,self.y1,self.y2),
-                'time_files':self.time_files,'equalize_hist':self.bool_eq_hist.get(),
-                'clip_limit':float(self.s_clip_limit.get()),
-                'threshold_out':threshold_out,'multiple_ranges':multiple_ranges
-            }
+        current_img_process_settings = self.get_img_process_settings
+        # Get time from filenames
         if not current_img_process_settings == self.last_img_process_settings:
-            if self.s_time_source.get()=='Date Modified':
-                # Get time from last modified time
-                t0 = datetime.datetime.fromtimestamp(os.path.getmtime(self.time_files[0]))
-                self.times=[0]*len(self.time_files)
-                for idx,timeFile in enumerate(self.time_files):
-                    ti = datetime.datetime.fromtimestamp(os.path.getmtime(self.time_files[idx]))
-                    self.times[idx] = (ti-t0).total_seconds()
-            elif self.s_time_source.get()=='Filename (time=*s)':
-                # Get time from filename'
-                self.times=[0]*len(self.time_files)
-                for idx,timeFile in enumerate(self.time_files):
-                    # Split first by "time=" then by "s" to get the numbers in between
-                    self.times[idx] = float((timeFile.split('time=')[1]).split('s')[0])
-                    #self.times[idx] = float((timeFile.split('t=')[1]).split('.png')[0])    
-            # Loop through files
-            filesToPlot = self.time_files
-            time_list = self.times
-            sort_indices = sorted(range(len(time_list)), key=lambda k: time_list[k])
-            if self.s_edge_method.get()=='Threshold Grain':
-                self.distances = np.zeros((len(self.lines),len(sort_indices)))
-            elif self.s_edge_method.get()=='Subtract Images':
-                # Make distance and times array smaller in length by one element,
-                # since subtraction reduces the number of datapoints by one
-                self.distances = np.zeros((len(self.lines),len(sort_indices)-1))
-                self.times.remove(max(self.times))
-                sort_indices = sort_indices[:-1]
-            self.denoised_images = ['']*len(sort_indices)
-            for idx,sort_idx in enumerate(sort_indices):
-                timeFile = filesToPlot[sort_idx]
+            self.extract_times_and_sort()
+        # Initialize distances array
+        self.distances = np.zeros((len(self.lines),len(self.sort_indices)))
+        # Now process images if needed
+        if not current_img_process_settings == self.last_img_process_settings:
+            self.denoised_images = ['']*len(self.sort_indices)
+            for idx,sort_idx in enumerate(self.sort_indices):
+                timeFile = self.time_files[sort_idx]
                 if idx==0:
                     t0=self.times[sort_idx]
                     ti=0
@@ -1053,17 +1006,17 @@ class GrowthRateAnalyzer(tk.ttk.Frame):
                 elif self.s_edge_method.get()=='Subtract Images':
                     denoised = subtract_and_denoise(
                                             self.time_files[sort_idx],
-                                            self.time_files[sort_indices[idx+1]],
+                                            self.time_files[self.sort_indices[idx+1]],
                                             self.x1,self.x2,self.y1,self.y2,
                                             int(self.s_disk.get()),
                                             img1=self.full_images[sort_idx],
-                                            img2=self.full_images[sort_indices[idx+1]],
+                                            img2=self.full_images[self.sort_indices[idx+1]],
                                             threshold=threshold_lower,
                                             equalize_hist=self.bool_eq_hist.get(),
                                             clip_limit=float(self.s_clip_limit.get()))[0]
                 self.denoised_images[idx] = denoised # save for speed if re-analyzing same area
             self.last_img_process_settings = current_img_process_settings
-        # Now extract growth front at eacht time step
+        # Now extract growth front at each time step
         for idx,denoised in enumerate(self.denoised_images):
             for line_idx in range(0,len(self.lines)):
                 self.distances[line_idx][idx] = get_growth_edge(
@@ -1120,6 +1073,55 @@ class GrowthRateAnalyzer(tk.ttk.Frame):
         self.canvas.draw()
         self.label_lines()
 
+    def get_img_process_settings(self):
+        if self.s_edge_method.get()=='Threshold Grain':
+            if self.bool_multi_ranges:
+                threshold_lower = [float(x) for x in
+                                self.s_threshold_lower.get().split(',')]
+                threshold_upper = [float(x) for x in
+                                self.s_threshold_upper.get().split(',')]
+            else:
+                threshold_lower = float(self.s_threshold_lower.get())
+                threshold_upper = float(self.s_threshold_upper.get())
+            multiple_ranges = self.bool_multi_ranges.get()
+            threshold_out = self.bool_threshold_out.get()
+        elif self.s_edge_method.get()=='Subtract Images':
+            if self.bool_threshold_on.get():
+                threshold_lower = float(self.s_threshold_lower.get())
+            else:
+                threshold_lower = None
+            # Variables that aren't used in this method:
+            threshold_upper = None
+            threshold_out = None
+            multiple_ranges = None
+        return {'method':self.s_edge_method.get(),'disk':int(self.s_disk.get()),
+                'threshold_lower':threshold_lower,'threshold_upper':threshold_upper,
+                'crop_region':(self.x1,self.x2,self.y1,self.y2),
+                'time_files':self.time_files,'equalize_hist':self.bool_eq_hist.get(),
+                'clip_limit':float(self.s_clip_limit.get()),
+                'threshold_out':threshold_out,'multiple_ranges':multiple_ranges}
+    def extract_times_and_sort(self):
+        if self.s_time_source.get()=='Date Modified':
+            # Get time from last modified time
+            t0 = datetime.datetime.fromtimestamp(os.path.getmtime(self.time_files[0]))
+            self.times=[0]*len(self.time_files)
+            for idx,timeFile in enumerate(self.time_files):
+                ti = datetime.datetime.fromtimestamp(os.path.getmtime(self.time_files[idx]))
+                self.times[idx] = (ti-t0).total_seconds()
+        elif self.s_time_source.get()=='Filename (time=*s)':
+            # Get time from filename'
+            self.times=[0]*len(self.time_files)
+            for idx,timeFile in enumerate(self.time_files):
+                # Split first by "time=" then by "s" to get the numbers in between
+                self.times[idx] = float((timeFile.split('time=')[1]).split('s')[0])
+                #self.times[idx] = float((timeFile.split('t=')[1]).split('.png')[0])    
+        # Loop through files
+        self.sort_indices = sorted(range(len(self.times)), key=lambda k: self.times[k])
+        if self.s_edge_method.get()=='Subtract Images':
+            # Make sort_indices and times arrays smaller in length by one element,
+            # since subtraction reduces the number of datapoints by one
+            self.times.remove(max(self.times))
+            self.sort_indices = self.sort_indices[:-1]
     def save_results(self):
         # Make save directory
         self.save_dir = os.path.join(self.base_dir,'analysis_results')
