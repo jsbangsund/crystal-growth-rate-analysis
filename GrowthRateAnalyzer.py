@@ -620,15 +620,18 @@ class GrowthRateAnalyzer(tk.ttk.Frame):
         #if self.df_file:
             #self.b_pick_df.configure(bg='green')
     def open_images_click(self):
-        # Reset initialization for other functions
-        self.crop_initialized = False
-        self.threshold_initialized = False
         file_list=[]
         files = askopenfilenames(
                   initialdir=self.base_dir,title='Choose files',
                   filetypes=(("png files",".png"),
                             ("tiff files",".tiff"),
                             ("all files","*.*")))
+        # If the prompt is canceled, returns empty string. Exit in this case.
+        if files == '':
+            return
+        # Reset initialization for other functions
+        self.crop_initialized = False
+        self.threshold_initialized = False
         for file in files:
             file_list.append(file)
         self.time_files = file_list
