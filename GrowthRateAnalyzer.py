@@ -720,7 +720,7 @@ class GrowthRateAnalyzer(tk.ttk.Frame):
                                     ', x2 = ' + str(self.x2) +
                                     ', y1 = ' + str(self.y1) +
                                     ', y2 = ' + str(self.y2)))
-        print(x1,x2,y1,y2)
+        #print(x1,x2,y1,y2)
     def eq_hist_cb_command(self):
         self.threshold_initialized=False
     def clear_threshold_ranges(self):
@@ -918,7 +918,7 @@ class GrowthRateAnalyzer(tk.ttk.Frame):
         # Incorrect number of points
         elif len(self.linebuilder.xs)%2==1:
             print('Incorrect number of points, draw start and endpoint for each direction of interest')
-        print(self.lines)
+        #print(self.lines)
     def check_edge_detection(self):
         # Remove old lines
         for line in self.ax[1].lines:
@@ -975,16 +975,17 @@ class GrowthRateAnalyzer(tk.ttk.Frame):
             length_per_pixel = image_width_microns[self.s_mag.get()]/img.shape[1]
         # Check whether image processing settings have changed
         # If not, used stored copies of processed images
-        current_img_process_settings = self.get_img_process_settings
-        # Get time from filenames
+        current_img_process_settings = self.get_img_process_settings()
+        # Get time from filenames, and sort by time
         if not current_img_process_settings == self.last_img_process_settings:
-            self.extract_times_and_sort()
+            self.extract_times_and_sort() # saves self.times and self.sort_indices
         # Initialize distances array
-        self.distances = np.zeros((len(self.lines),len(self.sort_indices)))
+        self.distances = np.zeros((len(self.lines),len(self.times)))
         # Now process images if needed
         if not current_img_process_settings == self.last_img_process_settings:
-            self.denoised_images = ['']*len(self.sort_indices)
-            for idx,sort_idx in enumerate(self.sort_indices):
+            self.denoised_images = ['']*len(self.times)
+            for idx in range(0,len(self.times)):
+                sort_idx = self.sort_indices[idx]
                 timeFile = self.time_files[sort_idx]
                 if idx==0:
                     t0=self.times[sort_idx]
@@ -994,13 +995,13 @@ class GrowthRateAnalyzer(tk.ttk.Frame):
                 if self.s_edge_method.get()=='Threshold Grain':
                     denoised = threshold_crop_denoise(self.time_files[sort_idx],
                                                   self.x1,self.x2,self.y1,self.y2,
-                                                  threshold_lower,
-                                                  threshold_upper,
+                                                  current_img_process_settings['threshold_lower'],
+                                                  current_img_process_settings['threshold_upper'],
                                                   int(self.s_disk.get()),
                                                   img = self.full_images[sort_idx],
                                                   equalize_hist=self.bool_eq_hist.get(),
-                                                  multiple_ranges=multiple_ranges,
-                                                  threshold_out=threshold_out,
+                                                  multiple_ranges=current_img_process_settings['multiple_ranges'],
+                                                  threshold_out=current_img_process_settings['threshold_out'],
                                                   clip_limit=float(self.s_clip_limit.get())
                                                   )[0]
                 elif self.s_edge_method.get()=='Subtract Images':
@@ -1011,7 +1012,7 @@ class GrowthRateAnalyzer(tk.ttk.Frame):
                                             int(self.s_disk.get()),
                                             img1=self.full_images[sort_idx],
                                             img2=self.full_images[self.sort_indices[idx+1]],
-                                            threshold=threshold_lower,
+                                            threshold=current_img_process_settings['threshold_lower'],
                                             equalize_hist=self.bool_eq_hist.get(),
                                             clip_limit=float(self.s_clip_limit.get()))[0]
                 self.denoised_images[idx] = denoised # save for speed if re-analyzing same area
@@ -1023,6 +1024,8 @@ class GrowthRateAnalyzer(tk.ttk.Frame):
                     denoised,self.lines[line_idx],
                     length_per_pixel=length_per_pixel
                     )
+        
+        # Could break this into separate function, for updating plot
         self.growth_rates=[]
         self.growth_rates_string=[]
         self.growth_lines_fit=['']*len(self.lines)
@@ -1039,6 +1042,7 @@ class GrowthRateAnalyzer(tk.ttk.Frame):
                                # return_index=True,remove_less_than=1)
             # print(filterIdx)
             # Filter out points that are less than 10% of the mean, or 5% greater than the last point
+            # This filtering could be smarter
             filterIdx = np.where(np.logical_and(
                 self.distances[line_idx]>np.mean(self.distances[line_idx])*0.1,
                 self.distances[line_idx]<self.distances[line_idx][-1]*1.05))[0]
@@ -1121,7 +1125,7 @@ class GrowthRateAnalyzer(tk.ttk.Frame):
             # Make sort_indices and times arrays smaller in length by one element,
             # since subtraction reduces the number of datapoints by one
             self.times.remove(max(self.times))
-            self.sort_indices = self.sort_indices[:-1]
+            #self.sort_indices = self.sort_indices[:-1]
     def save_results(self):
         # Make save directory
         self.save_dir = os.path.join(self.base_dir,'analysis_results')
@@ -1166,16 +1170,18 @@ class GrowthRateAnalyzer(tk.ttk.Frame):
             self.df = pd.read_pickle(os.path.join(self.df_dir,self.df_file))
         # Now append data
         data_dict_list=[]
+        img_process_settings = self.get_img_process_settings()
         for line_idx,growth_rate in enumerate(self.growth_rates):
             temp_dict = {'growth_rate_umps':growth_rate,
                         'line':self.lines[line_idx],
                         'x1,x2,y1,y2':(self.x1,self.x2,self.y1,self.y2),
                         'image_files':[os.path.basename(x) for x in self.time_files],
                         'image_dir':os.path.split(self.time_files[0])[0],
-                        'threshold_lower':float(self.s_threshold_lower.get()),
-                        'threshold_upper':float(self.s_threshold_upper.get()),
+                        'threshold_lower':img_process_settings['threshold_lower'],
+                        'threshold_upper':img_process_settings['threshold_upper'],
                         'disk':int(self.s_disk.get()),
-                        'histogram_equalization':self.bool_eq_hist.get()}
+                        'histogram_equalization':self.bool_eq_hist.get(),
+                        'edge_find_method':self.s_edge_method.get()}
             for key,input_dict in self.sample_props.items():
                 if input_dict['dtype']=='string':
                     temp_string = self.s_sample_props[key].get()
@@ -1205,6 +1211,7 @@ class GrowthRateAnalyzer(tk.ttk.Frame):
         # Save csv of data
         savename = self.increment_save_name(self.save_dir,'growth_rates_data','.csv')
         pd.DataFrame(data_dict_list).to_csv(os.path.join(self.save_dir,savename))
+        print('results saved to ' + savename)
 
     def increment_save_name(self,path,savename,extension):
         name_hold = savename
@@ -1264,7 +1271,7 @@ class LineBuilder:
         self.cid = line.figure.canvas.mpl_connect('button_press_event', self)
 
     def __call__(self, event):
-        print('click', event)
+        #print('click', event)
         if event.inaxes!=self.line.axes: return
         #first click sets values of nucleation site, creates point at n-site
         if len(self.xs) == 0:
