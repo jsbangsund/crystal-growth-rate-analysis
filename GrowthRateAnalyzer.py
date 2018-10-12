@@ -620,7 +620,6 @@ class GrowthRateAnalyzer(tk.ttk.Frame):
         #if self.df_file:
             #self.b_pick_df.configure(bg='green')
     def open_images_click(self):
-        file_list=[]
         files = askopenfilenames(
                   initialdir=self.base_dir,title='Choose files',
                   filetypes=(("png files",".png"),
@@ -632,9 +631,10 @@ class GrowthRateAnalyzer(tk.ttk.Frame):
         # Reset initialization for other functions
         self.crop_initialized = False
         self.threshold_initialized = False
-        for file in files:
-            file_list.append(file)
-        self.time_files = file_list
+        # Store filenames
+        self.time_files = list(files)
+        if len(self.time_files)==1:
+            raise Exception('Please select more than one image file')
         # Load images
         self.full_images=['']*len(self.time_files)
         for i,f in enumerate(self.time_files):
