@@ -1171,6 +1171,12 @@ class GrowthRateAnalyzer(tk.ttk.Frame):
         # otherwise, load df
         else:
             self.df = pd.read_pickle(os.path.join(self.df_dir,self.df_file))
+        # Also save a local df pkl file in the 'Analysis' folder, in case user is stupid and overwrites elsewhere
+        df_local_file = os.path.join(self.save_dir,'df.pkl')
+        if os.path.isfile(df_local_file):
+            df_local = pd.read_pickle(df_local_file)
+        else:
+            df_local = pd.DataFrame()
         # Now append data
         data_dict_list=[]
         img_process_settings = self.get_img_process_settings()
@@ -1208,13 +1214,15 @@ class GrowthRateAnalyzer(tk.ttk.Frame):
             data_dict_list.append(temp_dict)
         #print(data_dict_list)
         self.df = self.df.append(data_dict_list,ignore_index=True)
+        df_local = df_local.append(data_dict_list,ignore_index=True)
         #print(self.df)
         # Pickle the dataframe
         self.df.to_pickle(os.path.join(self.df_dir,self.df_file))
+        df_local.to_pickle(df_local_file)
         # Save csv of data
-        savename = self.increment_save_name(self.save_dir,'growth_rates_data','.csv')
-        pd.DataFrame(data_dict_list).to_csv(os.path.join(self.save_dir,savename))
-        print('results saved to ' + savename)
+        #savename = self.increment_save_name(self.save_dir,'growth_rates_data','.csv')+'.csv'
+        df_local.to_csv(os.path.join(self.save_dir,'growth_rates_data.csv'))
+        print('results saved to ' + self.df_dir + self.df_file)
 
     def increment_save_name(self,path,savename,extension):
         name_hold = savename
