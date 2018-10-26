@@ -109,7 +109,7 @@ def threshold_crop_denoise(img_file,x1,x2,y1,y2,threshold_lower,threshold_upper,
         If this is selected, threshold_lower and _upper must be lists of equal length
     '''
     # Read image in gray scale (mode='L'), unless a pre-loaded image is passed
-    if img == None:
+    if img is None:
         img=misc.imread(img_file,mode='L')
     if rescale:
         img = exposure.rescale_intensity(img,in_range=rescale)
@@ -145,9 +145,9 @@ def threshold_crop_denoise(img_file,x1,x2,y1,y2,threshold_lower,threshold_upper,
 def subtract_and_denoise(img_file1,img_file2,x1,x2,y1,y2,d,threshold=None,
                          rescale=None,img1=None,img2=None,equalize_hist=False,clip_limit=0.05):
     # Read image in gray scale (mode='L'), unless a pre-loaded image is passed
-    if img1==None:
+    if img1 is None:
         img1=misc.imread(img_file1,mode='L')
-    if img2==None:
+    if img2 is None:
         img2=misc.imread(img_file2,mode='L')
     if rescale:
         img1 = exposure.rescale_intensity(img1,in_range=rescale)
@@ -164,7 +164,7 @@ def subtract_and_denoise(img_file1,img_file2,x1,x2,y1,y2,d,threshold=None,
     # Normalize from 0 to 1
     subtract_norm = (subtract-subtract.min())/(subtract.max()-subtract.min())
     # Threshold, if lower threshold is given:
-    if threshold==None:
+    if threshold is None:
         thresholded = subtract_norm
     else:
         thresholded = subtract_norm > threshold
@@ -622,9 +622,9 @@ class GrowthRateAnalyzer(tk.ttk.Frame):
     def open_images_click(self):
         files = askopenfilenames(
                   initialdir=self.base_dir,title='Choose files',
-                  filetypes=(("png files",".png"),
-                            ("tiff files",".tiff"),
-                            ("all files","*.*")))
+                  filetypes=(("all files","*.*"),
+								("png files",".png"),
+                            ("tif files",".tif")))
         # If the prompt is canceled, returns empty string. Exit in this case.
         if files == '':
             return
@@ -1358,11 +1358,11 @@ class InteractiveLegend(object):
         handle = event.artist
         if handle in self.lookup_artist:
             artist = self.lookup_artist[handle]
-            if not self.lines1==None:
+            if not self.lines1 is None:
                 line_idx = self.lines1.index(artist)
                 self.data = np.delete(self.data,line_idx,axis=0) # remove data from array
                 self.lines1[line_idx].remove()
-            if not self.lines2==None: # remove companion line
+            if not self.lines2 is None: # remove companion line
                 self.lines2[line_idx].remove()
             self.update_legend() # remove line from legend
     
