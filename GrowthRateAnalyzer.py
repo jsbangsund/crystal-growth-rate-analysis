@@ -33,6 +33,7 @@ from tkinter import LEFT, RIGHT, W, E, N, S, INSERT, END, BOTH
 from tkinter.filedialog import (askopenfilename, askdirectory,
                              askopenfilenames)
 from tkinter.ttk import Style,Treeview, Scrollbar, Checkbutton
+import tkinter.ttk as ttk
 # Plotting specifics
 # UI
 from matplotlib.backends.backend_tkagg import (FigureCanvasTkAgg,
@@ -209,14 +210,15 @@ def get_growth_edge(img,line,length_per_pixel):
 
 
 
-class GrowthRateAnalyzer(tk.ttk.Frame):
+class GrowthRateAnalyzer(ttk.Frame):
     def __init__(self,parent):
-        tk.ttk.Frame.__init__(self, parent)
+        ttk.Frame.__init__(self, parent)
         self.parent = parent
-        self.root = tk.ttk.Frame
+        self.root = ttk.Frame
         # Initialization booleans
         self.last_img_process_settings = {}
         self.crop_initialized = False
+        self.axes_ranges_initialized = False
         self.threshold_initialized = False
         self.save_initialized = False
         self.df_file = None
@@ -232,26 +234,31 @@ class GrowthRateAnalyzer(tk.ttk.Frame):
     def configure_gui(self):
         # Master Window
         self.parent.title("Growth Rate Analysis")
-        self.style = Style()
-        self.style.theme_use("default")
+        #self.style = Style()
+        #self.style.theme_use("default")
+        # Set ttk style
+        self.style = ttk.Style(self.parent)
+        self.style.theme_use('clam')
+        self.style.configure('.', background='#eeeeee')
         # Lay out all the Frames
-        file_container = tk.ttk.Frame(self.parent)
+        file_container = ttk.Frame(self.parent)
         file_container.pack()
         # Create a frame to hold sample properties and the plotter
-        sample_props_and_plot_container = tk.ttk.Frame(self.parent)
+        sample_props_and_plot_container = ttk.Frame(self.parent)
         sample_props_and_plot_container.pack()
-        self.sample_props_container = tk.ttk.Frame(sample_props_and_plot_container)
+        self.sample_props_container = ttk.Frame(sample_props_and_plot_container)
         self.sample_props_container.pack(side=LEFT)
-        plotContainer = tk.ttk.Frame(sample_props_and_plot_container)
+        crop_container = ttk.Frame(sample_props_and_plot_container)
+        crop_container.pack(side=LEFT)
+        plotContainer = ttk.Frame(sample_props_and_plot_container)
         plotContainer.pack(side=LEFT)#fill=BOTH, expand=True
-        crop_container = tk.ttk.Frame(self.parent)
-        crop_container.pack()
-        self.threshold_plot_container = tk.ttk.Frame(self.parent)
+        
+        self.threshold_plot_container = ttk.Frame(self.parent)
         self.threshold_plot_container.pack(fill=BOTH, expand=True)
-        self.threshold_container = tk.ttk.Frame(self.parent)
+        self.threshold_container = ttk.Frame(self.parent)
         self.threshold_container.pack()
         # Open directory prompt
-        self.l_file_directory = tk.Label(file_container,
+        self.l_file_directory = ttk.Label(file_container,
                                  text='Time Series Directory')
         self.l_file_directory.grid(row=0, column=0, sticky=W)
         self.t_file_dir = tk.Text(file_container)
@@ -262,9 +269,18 @@ class GrowthRateAnalyzer(tk.ttk.Frame):
         #self.b_getDir.configure(text="Open Dir.")
         #self.b_getDir.grid(row=0, column=2, sticky=W)
         # Open file
-        self.b_getFile = tk.ttk.Button(file_container, command=self.open_images_click)
+        self.b_getFile = ttk.Button(file_container, command=self.open_images_click)
         self.b_getFile.configure(text="Open Files")
         self.b_getFile.grid(row=0, column=3, sticky=W)
+        # Select how times should be extracted
+        ttk.Label(file_container,text="Get time from:").grid(row=0,column=4)
+        self.s_time_source = tk.StringVar()
+        self.s_time_source.set('Filename (time=*s)')
+        self.e_time_source = ttk.OptionMenu(file_container,self.s_time_source,'Filename (time=*s)',
+                                *['Date Modified','Filename (time=*s)'])
+        self.e_time_source.grid(row=0,column=5)
+        self.e_time_source.config(width=17)
+        
         # Set-up sample properties:
         self.configure_sample_props()
         # Crop region plot
@@ -278,63 +294,49 @@ class GrowthRateAnalyzer(tk.ttk.Frame):
         self.toolbar.update()
 
         # Crop Region buttons
-        #self.fileDirLabel = tk.Label(file_container, text = 'Pick image files')
+        #self.fileDirLabel = ttk.Label(file_container, text = 'Pick image files')
         #self.fileDirLabel.grid(row=1, column=0, sticky=W)
-        self.b_plotCrop = tk.ttk.Button(crop_container, command=self.pick_crop_region)
+        b_width = 19
+        self.b_plotCrop = ttk.Button(crop_container, command=self.pick_crop_region)
         self.b_plotCrop.configure(text="Pick Crop")
         self.b_plotCrop.grid(row=0, column=0, sticky=W)
-        self.b_getRanges = tk.ttk.Button(crop_container, command=self.get_axes_ranges)
-        self.b_getRanges.configure(text="Get Crop Region")
-        self.b_getRanges.grid(row=0, column=1, sticky=E)
-        self.l_crop_range = tk.Label(crop_container, text = 'x1=?, x2=?, y1=?, y2=?')
-        self.l_crop_range.grid(row=0, column=2, sticky=W)
+        self.b_plotCrop.config(width=b_width)
+        #self.b_getRanges = ttk.Button(crop_container, command=self.get_axes_ranges)
+        #self.b_getRanges.configure(text="Get Crop Region")
+        #self.b_getRanges.grid(row=0, column=1, sticky=E)
+        #self.l_crop_range = ttk.Label(crop_container, text = 'x1=?, x2=?, y1=?, y2=?')
+        #self.l_crop_range.grid(row=0, column=2, sticky=W)
 
-        tk.Label(crop_container,text="Image Mag").grid(row=0,column=3)
-        self.s_mag=tk.StringVar()
-        self.s_mag.set('10x')
-        self.e_mag=tk.OptionMenu(crop_container,self.s_mag,
-                           *['4x','10x','20x','50x'])
-        self.e_mag.grid(row=0,column=4)
-
-        self.b_draw_lines = tk.ttk.Button(crop_container,
+        self.b_draw_lines = ttk.Button(crop_container,
                                 command=self.draw_line_segments)
         self.b_draw_lines.configure(text="Pick Directions")
-        self.b_draw_lines.grid(row=0, column=5, sticky=W)
+        self.b_draw_lines.grid(row=1, column=0, sticky=W)
+        self.b_draw_lines.config(width=b_width)
 
-        self.b_get_lines = tk.ttk.Button(crop_container, command=self.get_line_segments)
+        self.b_get_lines = ttk.Button(crop_container, command=self.get_line_segments)
         self.b_get_lines.configure(text="Get Directions")
-        self.b_get_lines.grid(row=0, column=6, sticky=E)
-
-        self.b_check_edge = tk.ttk.Button(crop_container, command=self.check_edge_detection)
-        self.b_check_edge.configure(text="Check Edge Detection")
-        self.b_check_edge.grid(row=1, column=0, sticky=W)
-
-        tk.Label(crop_container,text="Get time from:").grid(row=1,column=1)
-        self.s_time_source = tk.StringVar()
-        self.s_time_source.set('Filename (time=*s)')
-        self.e_time_source = tk.OptionMenu(crop_container,self.s_time_source,
-                                *['Date Modified','Filename (time=*s)'])
-        self.e_time_source.grid(row=1,column=2)
-
-        tk.Label(crop_container,text="Edge Det. Method:").grid(row=1,column=3)
-        self.s_edge_method=tk.StringVar()
-        self.s_edge_method.set('Subtract Images')
-        self.e_edge_method=tk.OptionMenu(crop_container,self.s_edge_method,
-                           *['Subtract Images','Threshold Grain'],
-                           command=self.set_edge_method)
-        self.e_edge_method.grid(row=1,column=3)
+        self.b_get_lines.grid(row=2, column=0, sticky=E)
+        self.b_get_lines.config(width=b_width)
         
-        self.b_extract_growth = tk.ttk.Button(crop_container, command=self.extract_growth_rates)
+        self.b_check_edge = ttk.Button(crop_container, command=self.check_edge_detection)
+        self.b_check_edge.configure(text="Check Edge Detection")
+        self.b_check_edge.grid(row=3, column=0, sticky=W)
+        self.b_check_edge.config(width=b_width)
+        
+        self.b_extract_growth = ttk.Button(crop_container, command=self.extract_growth_rates)
         self.b_extract_growth.configure(text="Extract Growth Rates")
-        self.b_extract_growth.grid(row=1, column=4, sticky=E)
-
-        self.b_pick_df = tk.ttk.Button(crop_container, command=self.pick_df)
+        self.b_extract_growth.grid(row=4, column=0, sticky=E)
+        self.b_extract_growth.config(width=b_width)
+        
+        self.b_pick_df = ttk.Button(crop_container, command=self.pick_df)
         self.b_pick_df.configure(text="Pick DF")
-        self.b_pick_df.grid(row=1, column=5, sticky=W)
-
-        self.b_save_results = tk.ttk.Button(crop_container, command=self.save_results)
+        self.b_pick_df.grid(row=5, column=0, sticky=W)
+        self.b_pick_df.config(width=b_width)
+        
+        self.b_save_results = ttk.Button(crop_container, command=self.save_results)
         self.b_save_results.configure(text="Save Results")
-        self.b_save_results.grid(row=1, column=6, sticky=W)
+        self.b_save_results.grid(row=6, column=0, sticky=W)
+        self.b_save_results.config(width=b_width)
         
         self.configure_subtract_fig()
 
@@ -383,17 +385,23 @@ class GrowthRateAnalyzer(tk.ttk.Frame):
                              {'label':'Note:',
                               'default_val':'None',
                               'type':'Entry',
-                              'dtype':'string'})
+                              'dtype':'string'}),
+                           # ('objective_mag',
+                             # {'label':'Image Mag.:',
+                              # 'default_val':'10x',
+                              # 'type':'OptionMenu',
+                              # 'dtype':'string',
+                              # 'options':['4x','10x','20x','50x']})
                            ])
         self.s_sample_props={}
         self.e_sample_props = ['']*len(self.sample_props)
         row_idx=0
         for key,input_dict in self.sample_props.items():
-            tk.Label(self.sample_props_container,text=input_dict['label']).grid(row=row_idx,column=0)
+            ttk.Label(self.sample_props_container,text=input_dict['label']).grid(row=row_idx,column=0)
             self.s_sample_props[key] = tk.StringVar()
             self.s_sample_props[key].set(input_dict['default_val'])
             if input_dict['type']=='Entry':
-                self.e_sample_props[row_idx] = tk.Entry(self.sample_props_container,
+                self.e_sample_props[row_idx] = ttk.Entry(self.sample_props_container,
                                              textvariable=self.s_sample_props[key],width=10)
             elif input_dict['type']=='OptionMenu':
                 self.e_sample_props[row_idx]=tk.OptionMenu(
@@ -402,15 +410,24 @@ class GrowthRateAnalyzer(tk.ttk.Frame):
                                         *self.sample_props[key]['options'])
             self.e_sample_props[row_idx].grid(row=row_idx,column=1)
             row_idx+=1
+        # Add drop down for image magnification:
+        # This isn't included in self.sample_props because that would have involved more changes
+        ttk.Label(self.sample_props_container,text="Image Mag").grid(row=row_idx,column=0)
+        self.s_mag=tk.StringVar()
+        self.s_mag.set('10x')
+        self.e_mag=ttk.OptionMenu(self.sample_props_container,self.s_mag,'10x',
+                           *['4x','10x','20x','50x'])
+        self.e_mag.grid(row=row_idx,column=1)
+        self.e_mag.config(width=5)
         # self.l_sample_props = ['']*len(labels)
         # self.e_sample_props = ['']*len(labels)
         # self.s_sample_props = ['']*len(labels)
         # for index,label in enumerate(labels):
-            # self.l_sample_props[index] = tk.Label(self.sample_props_container, text=label)
+            # self.l_sample_props[index] = ttk.Label(self.sample_props_container, text=label)
             # self.l_sample_props[index].grid(row=index, column=0, sticky=W)
             # self.s_sample_props[index] = tk.StringVar()
             # self.s_sample_props[index].set(defaults[index])
-            # self.e_sample_props[index] = tk.Entry(
+            # self.e_sample_props[index] = ttk.Entry(
                                         # self.sample_props_container,
                                         # textvariable=self.s_sample_props[index])
             # self.e_sample_props[index].grid(row=index,column=1)
@@ -431,31 +448,40 @@ class GrowthRateAnalyzer(tk.ttk.Frame):
         self.threshold_canvas.get_tk_widget().pack(fill = BOTH, expand = True)
         #self.toolbar = NavigationToolbar2Tk(self.threshold_canvas, self.threshold_plot_container)
         #self.toolbar.update()
-        tk.Label(self.threshold_container,text="Threshold").grid(row=1,column=0)
-        tk.Label(self.threshold_container,text="Lower").grid(row=0,column=1)
-        tk.Label(self.threshold_container,text="Upper").grid(row=0,column=2)
-        tk.Label(self.threshold_container,text="Disk").grid(row=0,column=3)
-        tk.Label(self.threshold_container,text="Inv. Thresh?").grid(row=0,column=4)
-        tk.Label(self.threshold_container,text="Multi Ranges?").grid(row=0,column=5)
-        tk.Label(self.threshold_container,text="Eq. Hist?").grid(row=0,column=6)
-        tk.Label(self.threshold_container,text="Clip Limit").grid(row=0,column=7)
+        ttk.Label(self.threshold_container,text="Threshold").grid(row=1,column=1)
+        ttk.Label(self.threshold_container,text="Lower").grid(row=0,column=2)
+        ttk.Label(self.threshold_container,text="Upper").grid(row=0,column=3)
+        ttk.Label(self.threshold_container,text="Disk").grid(row=0,column=4)
+        ttk.Label(self.threshold_container,text="Inv. Thresh?").grid(row=0,column=5)
+        ttk.Label(self.threshold_container,text="Multi Ranges?").grid(row=0,column=6)
+        ttk.Label(self.threshold_container,text="Eq. Hist?").grid(row=0,column=7)
+        ttk.Label(self.threshold_container,text="Clip Limit").grid(row=0,column=8)
+        # Edge detection method options
+        ttk.Label(self.threshold_container,text="Edge Det. Method:").grid(row=0,column=0)
+        self.s_edge_method=tk.StringVar()
+        #self.s_edge_method.set('Threshold Grain')
+        self.e_edge_method=ttk.OptionMenu(self.threshold_container,self.s_edge_method,'Threshold Grain',
+                           *['Subtract Images','Threshold Grain'],
+                           command=self.set_edge_method)
+        self.e_edge_method.grid(row=1,column=0)
+        
 
         self.s_threshold_lower=tk.StringVar()
         self.s_threshold_lower.set('60')
-        self.e_s_threshold_lower=tk.Entry(self.threshold_container,
+        self.e_s_threshold_lower=ttk.Entry(self.threshold_container,
                                    textvariable=self.s_threshold_lower,width=5)
-        self.e_s_threshold_lower.grid(row=1,column=1)
+        self.e_s_threshold_lower.grid(row=1,column=2)
 
         self.s_threshold_upper=tk.StringVar()
         self.s_threshold_upper.set('70')
-        self.e_s_threshold_upper=tk.Entry(self.threshold_container,
+        self.e_s_threshold_upper=ttk.Entry(self.threshold_container,
                                    textvariable=self.s_threshold_upper,width=5)
-        self.e_s_threshold_upper.grid(row=1,column=2)
+        self.e_s_threshold_upper.grid(row=1,column=3)
 
         self.s_disk=tk.StringVar()
         self.s_disk.set('5')
-        self.e_disk=tk.Entry(self.threshold_container,textvariable=self.s_disk,width=5)
-        self.e_disk.grid(row=1,column=3)
+        self.e_disk=ttk.Entry(self.threshold_container,textvariable=self.s_disk,width=5)
+        self.e_disk.grid(row=1,column=4)
 
         self.bool_threshold_out = tk.BooleanVar()
         self.bool_threshold_out.set(False)
@@ -463,7 +489,7 @@ class GrowthRateAnalyzer(tk.ttk.Frame):
                                 self.threshold_container,
                                 variable=self.bool_threshold_out,
                                 onvalue=True,offvalue=False)
-        self.e_threshold_out.grid(row=1,column=4)
+        self.e_threshold_out.grid(row=1,column=5)
 
         self.bool_multi_ranges = tk.BooleanVar()
         self.bool_multi_ranges.set(False)
@@ -471,30 +497,30 @@ class GrowthRateAnalyzer(tk.ttk.Frame):
                                 self.threshold_container,
                                 variable=self.bool_multi_ranges,
                                 onvalue=True,offvalue=False)
-        self.e_multi_ranges.grid(row=1,column=5)
+        self.e_multi_ranges.grid(row=1,column=6)
 
         self.bool_eq_hist = tk.BooleanVar()
         self.bool_eq_hist.set(True)
         self.e_eq_hist = tk.Checkbutton(self.threshold_container,variable=self.bool_eq_hist,
                                   onvalue = True, offvalue = False,
                                   command=self.eq_hist_cb_command)
-        self.e_eq_hist.grid(row=1,column=6)
+        self.e_eq_hist.grid(row=1,column=7)
 
         self.s_clip_limit = tk.StringVar()
         self.s_clip_limit.set('0.05')
         self.last_clip_limit=self.s_clip_limit.get()
-        self.e_clip_limit = tk.Entry(self.threshold_container,textvariable=self.s_clip_limit,width=5)
-        self.e_clip_limit.grid(row=1,column=7)
+        self.e_clip_limit = ttk.Entry(self.threshold_container,textvariable=self.s_clip_limit,width=5)
+        self.e_clip_limit.grid(row=1,column=8)
 
-        self.b_clear_ranges = tk.ttk.Button(self.threshold_container,
+        self.b_clear_ranges = ttk.Button(self.threshold_container,
                                     command=self.clear_threshold_ranges)
         self.b_clear_ranges.configure(text="Clear Ranges")
-        self.b_clear_ranges.grid(row=1, column=8, sticky=W)
+        self.b_clear_ranges.grid(row=1, column=9, sticky=W)
 
-        self.b_check_threshold = tk.ttk.Button(self.threshold_container,
+        self.b_check_threshold = ttk.Button(self.threshold_container,
                                     command=self.check_threshold)
         self.b_check_threshold.configure(text="Check Threshold")
-        self.b_check_threshold.grid(row=1, column=9, sticky=W)
+        self.b_check_threshold.grid(row=1, column=10, sticky=W)
 
         self.rectangles=[]
         self.rectangle = Rectangle(
@@ -558,11 +584,20 @@ class GrowthRateAnalyzer(tk.ttk.Frame):
         self.threshold_canvas.draw()
         self.threshold_canvas.get_tk_widget().pack(fill = BOTH, expand = True)
         #Subtraction parameters
-        tk.Label(self.threshold_container,text="Threshold?").grid(row=0,column=0)
-        tk.Label(self.threshold_container,text="Lower").grid(row=0,column=1)
-        tk.Label(self.threshold_container,text="Disk").grid(row=0,column=2)
-        tk.Label(self.threshold_container,text="Eq. Hist?").grid(row=0,column=3)
-        tk.Label(self.threshold_container,text="Clip Limit").grid(row=0,column=4)
+        ttk.Label(self.threshold_container,text="Threshold?").grid(row=0,column=1)
+        ttk.Label(self.threshold_container,text="Lower").grid(row=0,column=2)
+        ttk.Label(self.threshold_container,text="Disk").grid(row=0,column=3)
+        ttk.Label(self.threshold_container,text="Eq. Hist?").grid(row=0,column=4)
+        ttk.Label(self.threshold_container,text="Clip Limit").grid(row=0,column=5)
+        
+        # Edge detection method options
+        ttk.Label(self.threshold_container,text="Edge Det. Method:").grid(row=0,column=0)
+        self.s_edge_method=tk.StringVar()
+        self.s_edge_method.set('Subtract Images')
+        self.e_edge_method=ttk.OptionMenu(self.threshold_container,self.s_edge_method,'Subtract Images',
+                           *['Subtract Images','Threshold Grain'],
+                           command=self.set_edge_method)
+        self.e_edge_method.grid(row=1,column=0)
 
         self.bool_threshold_on = tk.BooleanVar()
         self.bool_threshold_on.set(True)
@@ -570,36 +605,36 @@ class GrowthRateAnalyzer(tk.ttk.Frame):
                                 self.threshold_container,
                                 variable=self.bool_threshold_on,
                                 onvalue=True,offvalue=False)
-        self.e_threshold_on.grid(row=1,column=0)
+        self.e_threshold_on.grid(row=1,column=1)
         
         self.s_threshold_lower=tk.StringVar()
         self.s_threshold_lower.set('0.05')
-        self.e_s_threshold_lower=tk.Entry(self.threshold_container,
+        self.e_s_threshold_lower=ttk.Entry(self.threshold_container,
                                    textvariable=self.s_threshold_lower,width=5)
-        self.e_s_threshold_lower.grid(row=1,column=1)
+        self.e_s_threshold_lower.grid(row=1,column=2)
 
         self.s_disk=tk.StringVar()
         self.s_disk.set('8')
-        self.e_disk=tk.Entry(self.threshold_container,textvariable=self.s_disk,width=5)
-        self.e_disk.grid(row=1,column=2)
+        self.e_disk=ttk.Entry(self.threshold_container,textvariable=self.s_disk,width=5)
+        self.e_disk.grid(row=1,column=3)
         
         self.bool_eq_hist = tk.BooleanVar()
         self.bool_eq_hist.set(False)
-        self.e_eq_hist = tk.Checkbutton(self.threshold_container,variable=self.bool_eq_hist,
+        self.e_eq_hist = ttk.Checkbutton(self.threshold_container,variable=self.bool_eq_hist,
                                   onvalue = True, offvalue = False,
                                   command=self.eq_hist_cb_command)
-        self.e_eq_hist.grid(row=1,column=3)
+        self.e_eq_hist.grid(row=1,column=4)
 
         self.s_clip_limit = tk.StringVar()
         self.s_clip_limit.set('0.05')
         self.last_clip_limit=self.s_clip_limit.get()
-        self.e_clip_limit = tk.Entry(self.threshold_container,textvariable=self.s_clip_limit,width=5)
-        self.e_clip_limit.grid(row=1,column=4)
+        self.e_clip_limit = ttk.Entry(self.threshold_container,textvariable=self.s_clip_limit,width=5)
+        self.e_clip_limit.grid(row=1,column=5)
 
-        self.b_check_threshold = tk.ttk.Button(self.threshold_container,
+        self.b_check_threshold = ttk.Button(self.threshold_container,
                                     command=self.check_subtraction)
         self.b_check_threshold.configure(text="Check Subtraction")
-        self.b_check_threshold.grid(row=1, column=9, sticky=W)
+        self.b_check_threshold.grid(row=1, column=6, sticky=W)
         
     def set_edge_method(self,val):
         if self.s_edge_method.get()=='Subtract Images':
@@ -708,6 +743,7 @@ class GrowthRateAnalyzer(tk.ttk.Frame):
             set_new_im_data(self.ax[0],self.cropData,img)
             self.canvas.draw()
         self.crop_initialized = True
+        self.axes_ranges_initialized = False
         # Reset threshold
         self.threshold_initialized = False
         #plt.show()
@@ -719,10 +755,15 @@ class GrowthRateAnalyzer(tk.ttk.Frame):
         self.x2=int(x2)
         self.y2=int(y2)
         self.y1=int(y1)
-        self.l_crop_range.config(text=('x1 = ' + str(self.x1) +
-                                    ', x2 = ' + str(self.x2) +
-                                    ', y1 = ' + str(self.y1) +
-                                    ', y2 = ' + str(self.y2)))
+        string = ('x1 = ' + str(self.x1)+', x2 = ' + str(self.x2) +
+                ', y1 = ' + str(self.y1) + ', y2 = ' + str(self.y2))
+        print(string)
+        self.ax[0].set_title(string)
+        self.axes_ranges_initialized = True
+        #self.l_crop_range.config(text=('x1 = ' + str(self.x1) +
+        #                            ', x2 = ' + str(self.x2) +
+        #                            ', y1 = ' + str(self.y1) +
+        #                            ', y2 = ' + str(self.y2)))
         #print(x1,x2,y1,y2)
     def eq_hist_cb_command(self):
         self.threshold_initialized=False
@@ -739,6 +780,9 @@ class GrowthRateAnalyzer(tk.ttk.Frame):
         self.s_threshold_upper.set('')
         self.threshold_canvas.draw()
     def check_threshold(self):
+        # Update crop range
+        if not self.axes_ranges_initialized:
+            self.get_axes_ranges()
         if not self.s_clip_limit.get() == self.last_clip_limit:
             self.threshold_initialized=False
             [b.remove() for b in self.threshold_plot_data[3][2]]
@@ -793,6 +837,9 @@ class GrowthRateAnalyzer(tk.ttk.Frame):
         self.last_clip_limit=self.s_clip_limit.get()
 
     def check_subtraction(self):
+        # Update crop range
+        if not self.axes_ranges_initialized:
+            self.get_axes_ranges()
         if not self.s_clip_limit.get() == self.last_clip_limit:
             self.threshold_initialized=False
             [b.remove() for b in self.threshold_plot_data[3][2]]
@@ -843,6 +890,9 @@ class GrowthRateAnalyzer(tk.ttk.Frame):
         self.last_clip_limit=self.s_clip_limit.get()
     
     def draw_line_segments(self):
+        # Update crop range
+        if not self.axes_ranges_initialized:
+            self.get_axes_ranges()
         if self.s_edge_method.get() == "Threshold Grain":
             if self.bool_multi_ranges:
                 threshold_lower = [float(x) for x in
@@ -967,6 +1017,9 @@ class GrowthRateAnalyzer(tk.ttk.Frame):
         self.canvas.draw()
 
     def extract_growth_rates(self):
+        # Update crop range
+        if not self.axes_ranges_initialized:
+            self.get_axes_ranges()
         # Remove old data
         self.ax[1].clear()
         # Check if images dimensions are as expected. If not use image width
