@@ -9,3 +9,6 @@ See below for example usage of the application:
 ![Example usage of application](https://github.com/jsbangsund/crystal-growth-rate-analysis/blob/master/example_usage.gif)
 
 (screen capture is made with https://www.screentogif.com/)
+
+Example crystal growth:
+![Example crystal growth](https://github.com/jsbangsund/crystal-growth-rate-analysis/blob/master/example_crystal_growth.gif)
