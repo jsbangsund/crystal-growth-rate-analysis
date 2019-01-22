@@ -22,4 +22,4 @@ if not os.path.isdir(frames_dir):
     os.mkdir(frames_dir)
 # Save frames
 for t in np.arange(0,clip.duration,time_step_seconds):
-    clip.save_frame(os.path.join(frames_dir,"t="+str(t)+".png"), t=t)
+    clip.save_frame(os.path.join(frames_dir,"time="+str(t)+"s.png"), t=t)
