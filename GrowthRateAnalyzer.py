@@ -1110,7 +1110,8 @@ class GrowthRateAnalyzer(ttk.Frame):
                 # 5% greater than the median of the last three points
             # old routine filtering less than 10% of the mean
                 # self.distances[line_idx]>np.mean(self.distances[line_idx])*0.1 
-            # This filtering could be smarter. Could add derivative filtering.
+            # This filtering could be smarter. Could add derivative filtering, or could
+            # iteratively fit and reject points with large MSE
             # logical_and.reduce((condition1,condition2,...,conditionN)) is used so that
             # more than two conditions can be added (logical_and only accepts one arg)
             # See https://stackoverflow.com/questions/20528328/numpy-logical-or-for-more-than-two-arguments
