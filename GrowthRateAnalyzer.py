@@ -980,6 +980,7 @@ class GrowthRateAnalyzer(ttk.Frame):
             print('Incorrect number of points, draw start and endpoint for each direction of interest')
         #print(self.lines)
     def check_edge_detection(self):
+        # TODO this function is outdated and doesn't consider substraction method
         # Remove old lines
         for line in self.ax[1].lines:
             line.remove()
@@ -1104,11 +1105,19 @@ class GrowthRateAnalyzer(ttk.Frame):
                                # curvature_threshold = 0.004,
                                # return_index=True,remove_less_than=1)
             # print(filterIdx)
-            # Filter out points that are less than 10% of the mean, or 5% greater than the last point
-            # This filtering could be smarter
-            filterIdx = np.where(np.logical_and(
-                self.distances[line_idx]>np.mean(self.distances[line_idx])*0.1,
-                self.distances[line_idx]<self.distances[line_idx][-1]*1.05))[0]
+            # Filter out points that are:
+                # less than 80% of the median of the first three points, 
+                # 5% greater than the median of the last three points
+            # old routine filtering less than 10% of the mean
+                # self.distances[line_idx]>np.mean(self.distances[line_idx])*0.1 
+            # This filtering could be smarter. Could add derivative filtering.
+            # logical_and.reduce((condition1,condition2,...,conditionN)) is used so that
+            # more than two conditions can be added (logical_and only accepts one arg)
+            # See https://stackoverflow.com/questions/20528328/numpy-logical-or-for-more-than-two-arguments
+            filterIdx = np.where(np.logical_and.reduce(
+                (self.distances[line_idx]>np.median(self.distances[line_idx][0:3])*0.8,
+                self.distances[line_idx]<np.median(self.distances[line_idx][-3:])*1.05,
+                )))[0]
             self.times = np.array(self.times)
             # Fit the data with a line
             params = np.polyfit(self.times[filterIdx], self.distances[line_idx][filterIdx], 1)
