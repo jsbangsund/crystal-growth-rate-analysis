@@ -1,3 +1,8 @@
+# This program allows timestamps to be added to microscope image filenames
+# Takes timestamp from last modified time, so be careful that the modified time reflects
+# when the image was taken, not when they were uploaded to the cloud (for example)
+# This is needed for certain programs, such as Lumera Infinity, which don't allows
+# timestamps to be added to a filename
 import tkinter as tk
 from tkinter import filedialog
 import glob

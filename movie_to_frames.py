@@ -1,3 +1,4 @@
+# This program saves frames of a movie as individual .png files to facilitate analysis
 import os
 # Install moviepy with: conda install -c conda-forge moviepy
 from moviepy.editor import VideoFileClip

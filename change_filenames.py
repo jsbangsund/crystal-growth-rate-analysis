@@ -1,3 +1,5 @@
+# This program allows filenames to be quickly modified
+# Useful if some piece of metadata was mistakenly entered and needs to be corrected
 import os
 import glob
 dirs = ['timeseries_20x','timeseries_20x(1)']
