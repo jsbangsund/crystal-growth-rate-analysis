@@ -11,4 +11,8 @@ See below for example usage of the application:
 (screen capture is made with https://www.screentogif.com/)
 
 Example crystal growth:
+
 ![Example crystal growth](https://github.com/jsbangsund/crystal-growth-rate-analysis/blob/master/example_crystal_growth.gif)
+
+ManualGrowthRateAnalyzer.py allows user to manually pick out edge points.
+This is useful for very low contrast images where it is difficult to automate edge detection, or for situations where a user wants to evaluate the accuracy of measurements based on edge detection.
