@@ -54,9 +54,6 @@ from matplotlib.patches import Rectangle
 # Colors
 from palettable.tableau import Tableau_10, Tableau_20
 from palettable.colorbrewer.qualitative import Set1_9
-# local code imports
-from oledpy import image_helper
-from oledpy import cleanSignal_curvature
 
 #plt.style.use('ggplot')
 # styleDir = os.path.join(os.path.expanduser('~'),
@@ -116,23 +113,31 @@ image_width_microns = {'4x':  2942.5,
                          '20x':  588.5,
                          '10x': 1170.3,
                          '50x':  233.7}
-def get_growth_edge(img,line,length_per_pixel):
-    # Get line profile
-    profile = profile_line(img,
-                           (line[0][1],line[0][0]),
-                           (line[1][1],line[1][0]))
-    # Find last point on grain (where image is still saturated)
-    growth_front_endpoint = np.where(profile==np.amax(profile))[0][-1]
-    line_endpoint = profile.shape[0]
-    # Get total line length
-    total_line_length = image_helper.get_line_length(
-                            line,mag='20x',unit='um',
-                            length_per_pixel=length_per_pixel)
-    # Distance to growth front is the fraction of the line up to the last point
-    distance_to_growth_front = (total_line_length
-                             * (growth_front_endpoint+1) # +1 accounts for index starting at 0
-                             / line_endpoint)
-    return distance_to_growth_front
+    
+def get_line_length(line,mag,unit='um',length_per_pixel=None):
+    '''
+    ax = axis handle
+    length = length of scalebar in 'unit'
+    unit = unit of length, mm for millimeter or um for microns
+    mag = magnification of microscope, '4x','10x','20x',or '50x'
+    length_per_pixel = conversion from pixel to length
+        default is None, using calibration factors for the Nikon
+    height = height of scalebar
+    loc = location specifier of scalebar
+    '''
+    if unit == 'um':
+        factor = 1
+    if unit == 'mm':
+        factor = 1e-3
+    # calibration distances for the Nikon microscope
+    micron_per_pixel = {'4x':1000/696, '10x':1000/1750,
+                       '20x':500/1740, '50x':230/2016}
+    if not length_per_pixel:
+        length_per_pixel = micron_per_pixel[mag]
+    x,y = zip(*line)
+    pixels = np.sqrt( (x[1]-x[0])**2 + (y[1]-y[0])**2 )
+    length = pixels * length_per_pixel * factor
+    return length
 
 
 
@@ -695,7 +700,7 @@ class GrowthRateAnalyzer(ttk.Frame):
                         # denoised,self.lines[line_idx],
                         # length_per_pixel=length_per_pixel
                         # )
-        total_line_length = image_helper.get_line_length(
+        total_line_length = get_line_length(
             line_to_growth_edge,mag=None,unit='um',length_per_pixel=length_per_pixel)
 
         self.distances[self.current_frame_index] = total_line_length
