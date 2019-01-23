@@ -200,7 +200,7 @@ def get_growth_edge(img,line,length_per_pixel):
     line_endpoint = profile.shape[0]
     # Get total line length
     total_line_length = image_helper.get_line_length(
-                            line,mag='20x',unit='um',
+                            line,mag=None,unit='um',
                             length_per_pixel=length_per_pixel)
     # Distance to growth front is the fraction of the line up to the last point
     distance_to_growth_front = (total_line_length

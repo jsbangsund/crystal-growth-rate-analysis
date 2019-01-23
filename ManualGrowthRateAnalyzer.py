@@ -1,6 +1,8 @@
 # Improvements to consider:
 # give option for time identifier string in case time=*s wasn't followed
 # give option to calibrate image length from window pixel width (based on known image window length), or just manually give a micron/pixel value
+# To ensure extracting perpendicular to growth front, could draw tangent line and specify
+# point where the tangent touches as the center point for a 90 degree rotation
 # Other options:
 # http://bigwww.epfl.ch/thevenaz/pointpicker/
 ###################################################################
@@ -492,6 +494,7 @@ class GrowthRateAnalyzer(ttk.Frame):
         # Zoom to region of interest in image. This will select crop region below
         # Pick the last time so the whole grain is contained within the crop region
         img=misc.imread(os.path.join(self.base_dir,self.time_files[-1]))#,mode='L'
+        self.full_last_frame = img # store last frame 
         #img = exposure.rescale_intensity(img,in_range='image')
         #img = exposure.equalize_adapthist(img,clip_limit=0.05)
         #fig,self.crop_ax=plt.subplots()
@@ -556,12 +559,15 @@ class GrowthRateAnalyzer(ttk.Frame):
             self.image_canvas.mpl_disconnect(self.picker_cid)
         except:
             pass
+        self.image_canvas.draw()
     def draw_line_segments(self):
         # Update crop range
         if not self.axes_ranges_initialized:
             self.get_axes_ranges()
         # Remove old lines
         for line in self.image_ax.lines:
+            line.remove()
+        for line in self.plot_ax.lines:
             line.remove()
         self.image_ax.set_title('Click to draw line endpoints')
         # Build lines
@@ -590,16 +596,17 @@ class GrowthRateAnalyzer(ttk.Frame):
     def start_edge_selection(self):
         # Initialize current frame position
         self.current_frame_index = 0
+        # Get line segments
+        self.get_line_segments()
         # Initialize coordinates
-        self.growth_edge_x_coord = np.zeros(len(self.time_files))
-        self.growth_edge_y_coord = np.zeros(len(self.time_files))
+        self.growth_edge_x = np.zeros(len(self.time_files))
+        self.growth_edge_y = np.zeros(len(self.time_files))
+        self.distances = np.zeros(len(self.time_files))
         # Stop the LineBuilder
         self.image_canvas.mpl_disconnect(self.linebuilder.cid)
         # Update crop range
         if not self.axes_ranges_initialized:
             self.get_axes_ranges()
-        # Remove old data
-        self.plot_ax.clear()
         # Check if images dimensions are as expected. If not use image width
         # Not very robust yet
         img = misc.imread(os.path.join(self.base_dir,self.time_files[0]))
@@ -612,26 +619,87 @@ class GrowthRateAnalyzer(ttk.Frame):
         sort_idx = self.sort_indices[self.current_frame_index]
         timeFile = self.time_files[sort_idx]
         self.t0 = self.times[sort_idx]
-        #self.sorted_times = self.times[self.sort_indices]-self.t0
+        self.sorted_times = np.array(self.times)[self.sort_indices]-self.t0
         self.reset_image_display(delete_line=False)
         self.load_frame(frame_index=sort_idx)
         self.image_ax.set_title('Frame #' + str(self.current_frame_index))
         
-        self.pick_points, = self.image_ax.plot([], [],'ob',ms=4,alpha=0.5)  # empty line
+        self.pick_points, = self.image_ax.plot([], [],'ob',ms=2,alpha=0.5)  # empty line
+        self.distances_line, = self.plot_ax.plot([], [],'o')
         #self.pointselector = PointSelector(self.pick_point)
         def on_pick(event):
             x = event.xdata
             y = event.ydata
-            self.growth_edge_x_coord[self.current_frame_index] = x
-            self.growth_edge_y_coord[self.current_frame_index] = y
-            self.pick_points.set_data(self.growth_edge_x_coord,self.growth_edge_y_coord)
+            self.growth_edge_x[self.current_frame_index] = x
+            self.growth_edge_y[self.current_frame_index] = y
+            # Could just plot to current frame [:self.current_frame_index]
+            self.pick_points.set_data(self.growth_edge_x,self.growth_edge_y)
             self.image_canvas.draw()
+            self.get_distance()
+            self.plot_canvas.draw()
             self.forward_frame()
-            print(x,y)
+            #print(x,y)
+            
             #print(self.growth_edge_x_coord)
         self.picker_cid = self.image_canvas.mpl_connect('button_press_event',on_pick)
         
-    # Connect spacebar to forward_frame
+    def get_closest_point_on_line(self,p1,p2,nearby_point):
+        # see https://stackoverflow.com/questions/47177493/python-point-on-a-line-closest-to-third-point
+        # When user picks a point, we want to find the closest point that lies on the drawn line
+        # Using the function from the above stackexchange, we can get the closest point
+        # which lies on a line defined by endpoints p1 and p2 to the outside point "nearby_point"
+        x1, y1 = p1
+        x2, y2 = p2
+        x3, y3 = nearby_point
+        dx, dy = x2-x1, y2-y1
+        det = dx*dx + dy*dy
+        a = (dy*(y3-y1)+dx*(x3-x1))/det
+        return x1+a*dx, y1+a*dy
+    
+    def get_distance(self,nearby_point=None):
+        # Check if images dimensions are as expected. If not use image width
+        # Not very robust yet
+        img = self.full_last_frame
+        if img.shape[1]==2048:
+            length_per_pixel = micron_per_pixel[self.s_mag.get()]
+        else:
+            length_per_pixel = image_width_microns[self.s_mag.get()]/img.shape[1]
+        # Get endpoints of line
+        line = self.lines[0]
+        
+        p1 = (line[0][0],line[0][1])
+        p2 = (line[1][0],line[1][1])
+        if nearby_point is None:
+            nearby_point = (self.growth_edge_x[self.current_frame_index],
+                          self.growth_edge_y[self.current_frame_index])
+        point_on_line = self.get_closest_point_on_line(p1,p2,nearby_point)
+        # line is list of tuples of start and endpoint
+            # e.g. [(x1,y1),(x2,y2)]
+        line_to_growth_edge = [p1,point_on_line]
+        
+        # self.distances[line_idx][idx] = get_growth_edge(
+                        # denoised,self.lines[line_idx],
+                        # length_per_pixel=length_per_pixel
+                        # )
+        total_line_length = image_helper.get_line_length(
+            line_to_growth_edge,mag=None,unit='um',length_per_pixel=length_per_pixel)
+
+        self.distances[self.current_frame_index] = total_line_length
+        self.distances_line.set_data(self.sorted_times,self.distances)
+        self.plot_ax.axis([0,np.amax(self.times)*1.1,0,np.amax(self.distances)*1.1])
+        self.plot_canvas.draw()
+        # Troubleshooting code
+        # self.image_ax.plot(point_on_line[0],point_on_line[1],'og',ms=4,alpha=0.5)
+        # self.image_canvas.draw()        
+        # print(self.lines[0])
+        # print(p1)
+        # print(p2)
+        # print(nearby_point)
+        # print(point_on_line)
+        # print(total_line_length)
+        print(self.distances)
+        print(self.times)
+    # This function is connected to the right arrow key
     def forward_frame(self,_event=None):
         # Get coordinates from last frame
         #self.growth_edge_x_coord[self.current_frame_index] = self.pointselector.xs[0]
@@ -643,7 +711,6 @@ class GrowthRateAnalyzer(ttk.Frame):
             print('last frame reached')
         self.load_frame(frame_index=self.sort_indices[self.current_frame_index])
         self.image_ax.set_title('Frame #' + str(self.current_frame_index))
-        
     def reverse_frame(self,_event=None):
         # Get coordinates from last frame
         #self.growth_edge_x_coord[self.current_frame_index] = self.pointselector.xs[0]
