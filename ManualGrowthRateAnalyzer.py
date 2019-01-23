@@ -488,6 +488,7 @@ class GrowthRateAnalyzer(ttk.Frame):
         self.t_file_dir.insert(INSERT, self.base_dir +'/')
 
     def pick_crop_region(self):
+        self.reset_image_display(reset_crop=True)
         # Zoom to region of interest in image. This will select crop region below
         # Pick the last time so the whole grain is contained within the crop region
         img=misc.imread(os.path.join(self.base_dir,self.time_files[-1]))#,mode='L'
@@ -540,6 +541,21 @@ class GrowthRateAnalyzer(ttk.Frame):
         self.cropData.set_data(new_image)
         self.image_ax.relim()
         self.image_canvas.draw()
+    def reset_image_display(self,reset_crop=False,delete_line=True):
+        # Reset ranges
+        if reset_crop:
+            self.crop_initialized = False
+        # Delete lines
+        if delete_line:
+            # Remove old lines
+            for line in self.image_ax.lines:
+                line.remove()
+        # Delete picker points and Reset mpl picker
+        try:
+            self.pick_points.set_data([],[])
+            self.image_canvas.mpl_disconnect(self.picker_cid)
+        except:
+            pass
     def draw_line_segments(self):
         # Update crop range
         if not self.axes_ranges_initialized:
@@ -549,8 +565,8 @@ class GrowthRateAnalyzer(ttk.Frame):
             line.remove()
         self.image_ax.set_title('Click to draw line endpoints')
         # Build lines
-        line, = self.image_ax.plot([], [],'-or',ms=2,alpha=0.5)  # empty line
-        self.linebuilder = LineBuilder(line)
+        self.line, = self.image_ax.plot([], [],'-or',ms=2,alpha=0.5)  # empty line
+        self.linebuilder = LineBuilder(self.line)
         #self.ax[0].axis('off')
         self.image_canvas.draw()
     def get_line_segments(self):
@@ -597,6 +613,7 @@ class GrowthRateAnalyzer(ttk.Frame):
         timeFile = self.time_files[sort_idx]
         self.t0 = self.times[sort_idx]
         #self.sorted_times = self.times[self.sort_indices]-self.t0
+        self.reset_image_display(delete_line=False)
         self.load_frame(frame_index=sort_idx)
         self.image_ax.set_title('Frame #' + str(self.current_frame_index))
         
@@ -612,7 +629,7 @@ class GrowthRateAnalyzer(ttk.Frame):
             self.forward_frame()
             print(x,y)
             #print(self.growth_edge_x_coord)
-        self.image_canvas.mpl_connect('button_press_event',on_pick)
+        self.picker_cid = self.image_canvas.mpl_connect('button_press_event',on_pick)
         
     # Connect spacebar to forward_frame
     def forward_frame(self,_event=None):
