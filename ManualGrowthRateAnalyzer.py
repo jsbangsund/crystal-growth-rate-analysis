@@ -637,7 +637,7 @@ class GrowthRateAnalyzer(ttk.Frame):
         self.load_frame(frame_index=sort_idx)
         self.image_ax.set_title('Frame #' + str(self.current_frame_index))
         
-        self.pick_points, = self.image_ax.plot([], [],'ob',ms=2,alpha=0.5)  # empty line
+        self.pick_points, = self.image_ax.plot([], [],'ob',ms=2,alpha=0.7)  # empty line
         self.distances_line, = self.plot_ax.plot([], [],'o')
         #self.pointselector = PointSelector(self.pick_point)
         
