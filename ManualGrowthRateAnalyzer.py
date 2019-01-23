@@ -271,9 +271,14 @@ class GrowthRateAnalyzer(ttk.Frame):
         # Bind the arrow keys
         self.parent.bind('<Left>', self.reverse_frame)
         
+        self.b_reset_crop = ttk.Button(button_container, command=self.reset_crop)
+        self.b_reset_crop.configure(text="Reset Crop")
+        self.b_reset_crop.grid(row=5, column=0, sticky=W)
+        self.b_reset_crop.config(width=b_width)
+        
         self.b_fit = ttk.Button(button_container, command=self.fit_growth_rate)
         self.b_fit.configure(text="Fit Growth Rate")
-        self.b_fit.grid(row=5, column=0, sticky=W)
+        self.b_fit.grid(row=6, column=0, sticky=W)
         self.b_fit.config(width=b_width)
         
         # self.b_pick_df = ttk.Button(button_container, command=self.pick_df)
@@ -283,7 +288,7 @@ class GrowthRateAnalyzer(ttk.Frame):
         
         self.b_save_results = ttk.Button(button_container, command=self.save_results)
         self.b_save_results.configure(text="Save Results")
-        self.b_save_results.grid(row=6, column=0, sticky=W)
+        self.b_save_results.grid(row=7, column=0, sticky=W)
         self.b_save_results.config(width=b_width)
 
         self.pack(fill=BOTH, expand=1)
@@ -491,7 +496,7 @@ class GrowthRateAnalyzer(ttk.Frame):
         self.t0 = self.times[self.sort_indices[0]]
         self.sorted_times = np.array(self.times)[self.sort_indices]-self.t0
         self.time_files = np.array(self.time_files)[self.sort_indices]
-    def pick_crop_region(self): 
+    def pick_crop_region(self,delete_line=False): 
         self.reset_image_display(reset_crop=False)
         # Zoom to region of interest in image. This will select crop region below
         # Pick the last time so the whole grain is contained within the crop region
@@ -526,10 +531,17 @@ class GrowthRateAnalyzer(ttk.Frame):
         #                            ', y2 = ' + str(self.y2)))
         #print(x1,x2,y1,y2)
     def load_frame(self,frame_index):
+        # Update crop range
+        self.get_axes_ranges()
+        # load image
         img=misc.imread(os.path.join(self.base_dir,self.time_files[frame_index]))
-        self.current_frame=img[self.y1:self.y2,self.x1:self.x2]
+        # Set data
+        self.cropData.set_data(img)
+        self.image_canvas.draw()
+        # crop
+        #self.current_frame=img[self.y1:self.y2,self.x1:self.x2]
         # TODO enter contrast processing here
-        self.update_image_display(self.current_frame)
+        #self.update_image_display(self.current_frame)
     def update_image_display(self,new_image):
         # Change data extent to match new cropped image
         self.cropData.set_extent((0, new_image.shape[1], new_image.shape[0], 0))
@@ -539,6 +551,10 @@ class GrowthRateAnalyzer(ttk.Frame):
         # Now set the data
         self.cropData.set_data(new_image)
         self.image_ax.relim()
+        self.image_canvas.draw()
+    def reset_crop(self):
+        self.image_ax.set_xlim(0,self.full_last_frame.shape[1])
+        self.image_ax.set_ylim(self.full_last_frame.shape[0],0)
         self.image_canvas.draw()
     def reset_image_display(self,reset_crop=True,delete_line=True):
         if reset_crop:
@@ -624,17 +640,41 @@ class GrowthRateAnalyzer(ttk.Frame):
         self.pick_points, = self.image_ax.plot([], [],'ob',ms=2,alpha=0.5)  # empty line
         self.distances_line, = self.plot_ax.plot([], [],'o')
         #self.pointselector = PointSelector(self.pick_point)
+        
+        # To allow zoom to occur during, distinguish click and zoom
+        # see https://stackoverflow.com/questions/48446351/distinguish-button-press-event-from-drag-and-zoom-clicks-in-matplotlib
+        # MAX_CLICK_LENGTH = 0.1 # in seconds; anything longer is a drag motion
+
+        # def onclick(event, ax):
+            # self.image_ax.time_onclick = time.time()
+
+        # def onrelease(event):
+            # # Only clicks inside this axis are valid.
+            # if event.inaxes == self.image_ax:
+                # if event.button == 1 and ((time.time() - ax.time_onclick) < MAX_CLICK_LENGTH):
+                    # print(event.xdata, event.ydata)
+                    # # Draw the click just made
+                    # ax.scatter(event.xdata, event.ydata)
+                    # ax.figure.canvas.draw()
+                # elif event.button == 2:
+                    # print("scroll click")
+                # elif event.button == 3:
+                    # print("right click")
+                # else:
+                    # pass
         def on_pick(event):
-            x = event.xdata
-            y = event.ydata
-            self.growth_edge_x[self.current_frame_index] = x
-            self.growth_edge_y[self.current_frame_index] = y
-            # Could just plot to current frame [:self.current_frame_index]
-            self.pick_points.set_data(self.growth_edge_x,self.growth_edge_y)
-            self.image_canvas.draw()
-            self.get_distance()
-            # If supporting multiple lines, remove this:
-            self.forward_frame()
+            # Act on right click
+            if event.button == 3:
+                x = event.xdata
+                y = event.ydata
+                self.growth_edge_x[self.current_frame_index] = x
+                self.growth_edge_y[self.current_frame_index] = y
+                # Could just plot to current frame [:self.current_frame_index]
+                self.pick_points.set_data(self.growth_edge_x,self.growth_edge_y)
+                self.image_canvas.draw()
+                self.get_distance()
+                # If supporting multiple lines, remove this:
+                self.forward_frame()
             #print(x,y)
             
             #print(self.growth_edge_x_coord)
