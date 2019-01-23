@@ -223,7 +223,7 @@ class GrowthRateAnalyzer(ttk.Frame):
         self.configure_sample_props()
         
         # Image display figure
-        fig_height = 5
+        fig_height = 6
         self.image_fig, self.image_ax = plt.subplots(figsize=(2048/1536 * fig_height,fig_height))
         #self.image_fig.subplots_adjust(wspace=0.29,left=0.01,bottom=0.17,top=.95,right=0.75)
         self.image_canvas = FigureCanvasTkAgg(self.image_fig, master=image_container)
@@ -278,10 +278,15 @@ class GrowthRateAnalyzer(ttk.Frame):
         # Bind the arrow keys
         self.parent.bind('<Left>', self.reverse_frame)
         
-        self.b_pick_df = ttk.Button(button_container, command=self.pick_df)
-        self.b_pick_df.configure(text="Pick DF")
-        self.b_pick_df.grid(row=5, column=0, sticky=W)
-        self.b_pick_df.config(width=b_width)
+        self.b_fit = ttk.Button(button_container, command=self.fit_growth_rate)
+        self.b_fit.configure(text="Fit Growth Rate")
+        self.b_fit.grid(row=5, column=0, sticky=W)
+        self.b_fit.config(width=b_width)
+        
+        # self.b_pick_df = ttk.Button(button_container, command=self.pick_df)
+        # self.b_pick_df.configure(text="Pick DF")
+        # self.b_pick_df.grid(row=5, column=0, sticky=W)
+        # self.b_pick_df.config(width=b_width)
         
         self.b_save_results = ttk.Button(button_container, command=self.save_results)
         self.b_save_results.configure(text="Save Results")
@@ -488,8 +493,16 @@ class GrowthRateAnalyzer(ttk.Frame):
         self.base_dir = new_base_dir
         self.t_file_dir.delete("1.0",END)
         self.t_file_dir.insert(INSERT, self.base_dir +'/')
-
+        # Sort files by time
+        self.extract_times_and_sort() # saves self.times and self.sort_indices
+        self.t0 = self.times[self.sort_indices[0]]
+        self.sorted_times = np.array(self.times)[self.sort_indices]-self.t0
+        self.time_files = np.array(self.time_files)[self.sort_indices]
     def pick_crop_region(self):
+        self.extract_times_and_sort() # saves self.times and self.sort_indices
+        self.t0 = self.times[self.sort_indices[0]]
+        self.sorted_times = np.array(self.times)[self.sort_indices]-self.t0
+        self.time_files = np.array(self.time_files)[self.sort_indices]
         # Fix this. Image ranges aren't reset.  
         self.reset_image_display(reset_crop=True)
         # Zoom to region of interest in image. This will select crop region below
@@ -637,6 +650,7 @@ class GrowthRateAnalyzer(ttk.Frame):
             self.pick_points.set_data(self.growth_edge_x,self.growth_edge_y)
             self.image_canvas.draw()
             self.get_distance()
+            # If supporting multiple lines, remove this:
             self.forward_frame()
             #print(x,y)
             
@@ -688,15 +702,6 @@ class GrowthRateAnalyzer(ttk.Frame):
         self.distances_line.set_data(self.sorted_times,self.distances)
         self.plot_ax.axis([0,np.amax(self.times)*1.1,0,np.amax(self.distances)*1.1])
         self.plot_canvas.draw()
-        # Troubleshooting code
-        # self.image_ax.plot(point_on_line[0],point_on_line[1],'og',ms=4,alpha=0.5)
-        # self.image_canvas.draw()        
-        # print(self.lines[0])
-        # print(p1)
-        # print(p2)
-        # print(nearby_point)
-        # print(point_on_line)
-        # print(total_line_length)
     # This function is connected to the right arrow key
     def forward_frame(self,_event=None):
         # Get coordinates from last frame
@@ -705,10 +710,11 @@ class GrowthRateAnalyzer(ttk.Frame):
         # Update current frame position
         if self.current_frame_index < len(self.time_files)-1:
             self.current_frame_index += 1
+            self.load_frame(frame_index=self.sort_indices[self.current_frame_index])
+            self.image_ax.set_title('Frame #' + str(self.current_frame_index))
         else:
             print('last frame reached')
-        self.load_frame(frame_index=self.sort_indices[self.current_frame_index])
-        self.image_ax.set_title('Frame #' + str(self.current_frame_index))
+    # This function is connected to the left arrow key
     def reverse_frame(self,_event=None):
         # Get coordinates from last frame
         #self.growth_edge_x_coord[self.current_frame_index] = self.pointselector.xs[0]
@@ -716,137 +722,23 @@ class GrowthRateAnalyzer(ttk.Frame):
         # Update current frame position
         if self.current_frame_index > 0:
             self.current_frame_index -= 1
+            self.load_frame(frame_index=self.sort_indices[self.current_frame_index])
+            self.image_ax.set_title('Frame #' + str(self.current_frame_index))
         else:
             print('first frame reached')
-        self.load_frame(frame_index=self.sort_indices[self.current_frame_index])
-        self.image_ax.set_title('Frame #' + str(self.current_frame_index))
-
-    def extract_growth_rates(self):
-        # Update crop range
-        if not self.axes_ranges_initialized:
-            self.get_axes_ranges()
-        # Remove old data
-        self.plot_ax.clear()
-        # Check if images dimensions are as expected. If not use image width
-        # Not very robust yet
-        img = self.full_images[-1]
-        if img.shape[1]==2048:
-            length_per_pixel = micron_per_pixel[self.s_mag.get()]
-        else:
-            length_per_pixel = image_width_microns[self.s_mag.get()]/img.shape[1]
-        # Check whether image processing settings have changed
-        # If not, used stored copies of processed images
-        current_img_process_settings = self.get_img_process_settings()
-        # Get time from filenames, and sort by time
-        if not current_img_process_settings == self.last_img_process_settings:
-            self.extract_times_and_sort() # saves self.times and self.sort_indices
-        # Initialize distances array
-        self.distances = np.zeros((len(self.lines),len(self.times)))
-        # Now process images if needed
-        if not current_img_process_settings == self.last_img_process_settings:
-            self.denoised_images = ['']*len(self.times)
-            for idx in range(0,len(self.times)):
-                sort_idx = self.sort_indices[idx]
-                timeFile = self.time_files[sort_idx]
-                if idx==0:
-                    t0=self.times[sort_idx]
-                    ti=0
-                else:
-                    ti = self.times[sort_idx]-t0
-                if self.s_edge_method.get()=='Threshold Grain':
-                    denoised = threshold_crop_denoise(self.time_files[sort_idx],
-                                                  self.x1,self.x2,self.y1,self.y2,
-                                                  current_img_process_settings['threshold_lower'],
-                                                  current_img_process_settings['threshold_upper'],
-                                                  int(self.s_disk.get()),
-                                                  img = self.full_images[sort_idx],
-                                                  equalize_hist=self.bool_eq_hist.get(),
-                                                  multiple_ranges=current_img_process_settings['multiple_ranges'],
-                                                  threshold_out=current_img_process_settings['threshold_out'],
-                                                  clip_limit=float(self.s_clip_limit.get())
-                                                  )[0]
-                elif self.s_edge_method.get()=='Subtract Images':
-                    denoised = subtract_and_denoise(
-                                            self.time_files[sort_idx],
-                                            self.time_files[self.sort_indices[idx+1]],
-                                            self.x1,self.x2,self.y1,self.y2,
-                                            int(self.s_disk.get()),
-                                            img1=self.full_images[sort_idx],
-                                            img2=self.full_images[self.sort_indices[idx+1]],
-                                            threshold=current_img_process_settings['threshold_lower'],
-                                            equalize_hist=self.bool_eq_hist.get(),
-                                            clip_limit=float(self.s_clip_limit.get()))[0]
-                self.denoised_images[idx] = denoised # save for speed if re-analyzing same area
-            self.last_img_process_settings = current_img_process_settings
-        # Now extract growth front at each time step
-        for idx,denoised in enumerate(self.denoised_images):
-            for line_idx in range(0,len(self.lines)):
-                self.distances[line_idx][idx] = get_growth_edge(
-                    denoised,self.lines[line_idx],
-                    length_per_pixel=length_per_pixel
-                    )
-        
-        # Could break this into separate function, for updating plot
+    def fit_growth_rate(self):
         self.growth_rates=[]
         self.growth_rates_string=[]
         self.growth_lines_fit=['']*len(self.lines)
-        self.growth_lines=['']*len(self.lines)
-        c_idx=-1
-        for line_idx,line in enumerate(self.lines):
-            c_idx +=1
-            if c_idx>9:
-                c_idx=0
-            # print(self.times)
-            # print(self.distances)
-            # x,y,filterIdx=cleanSignal_curvature(self.times,self.distances[line_idx],
-                               # curvature_threshold = 0.004,
-                               # return_index=True,remove_less_than=1)
-            # print(filterIdx)
-            # Filter out points that are:
-                # less than 80% of the median of the first three points, 
-                # 5% greater than the median of the last three points
-            # old routine filtering less than 10% of the mean
-                # self.distances[line_idx]>np.mean(self.distances[line_idx])*0.1 
-            # This filtering could be smarter. Could add derivative filtering, or could
-            # iteratively fit and reject points with large MSE
-            # logical_and.reduce((condition1,condition2,...,conditionN)) is used so that
-            # more than two conditions can be added (logical_and only accepts one arg)
-            # See https://stackoverflow.com/questions/20528328/numpy-logical-or-for-more-than-two-arguments
-            filterIdx = np.where(np.logical_and.reduce(
-                (self.distances[line_idx]>np.median(self.distances[line_idx][0:3])*0.8,
-                self.distances[line_idx]<np.median(self.distances[line_idx][-3:])*1.05,
-                )))[0]
-            self.times = np.array(self.times)
-            # Fit the data with a line
-            params = np.polyfit(self.times[filterIdx], self.distances[line_idx][filterIdx], 1)
-            line1,=self.plot_ax.plot(self.times,np.array(self.times)*params[0]+params[1],'--',
-                color=Tableau_10.mpl_colors[c_idx],linewidth=1.5)
-            self.growth_lines_fit.append(line1)
-            self.plot_ax.set_xlabel('Time (s)')
-            self.plot_ax.set_ylabel('Grain Radius ($\mu$m)')
-            print('{:.2f}'.format(params[0])+' micron/sec')
-            self.growth_rates_string.append('{:.2f}'.format(params[0])+' micron/sec')
-            self.growth_rates.append(params[0])
-            # Make legend label, decide units based on size of value
-            if params[0]>10:
-                label_string = '#' + str(line_idx+1) + ', ' + '{:.1f}'.format(params[0])+' $\mu$m/s'
-            elif params[0]>0.1:
-                label_string = '#' + str(line_idx+1) + ', ' + '{:.2f}'.format(params[0])+' $\mu$m/s'
-            else:
-                label_string = '#' + str(line_idx+1) + ', ' + '{:.1f}'.format(params[0]*1e3)+' nm/s'
-            self.growth_lines[line_idx],=self.plot_ax.plot(self.times,self.distances[line_idx],'o',color=Tableau_10.mpl_colors[c_idx],
-                label=label_string)
-        self.legend = self.plot_ax.legend(bbox_to_anchor=(1.0, 1.0),
-                    title='click line to remove')
-        # Need to figure out best way to modify data between the two classes
-        # self.interactive_legend = interactive_legend(
-            # ax=self.ax[1],lines1=self.growth_lines,lines2=self.growth_lines_fit,
-            # data=self.distances)
-        # Re-evaluate limits
-        self.plot_ax.relim()
+        params = np.polyfit(self.sorted_times, self.distances, 1)
+        line1,=self.plot_ax.plot(self.sorted_times,self.sorted_times*params[0]+params[1],'--',
+            color='k',linewidth=1.5) # Tableau_10.mpl_colors[c_idx]
+        self.growth_lines_fit.append(line1)
+        print('{:.2f}'.format(params[0])+' micron/sec')
+        self.growth_rates_string.append('{:.2f}'.format(params[0])+' micron/sec')
+        self.growth_rates.append(params[0])
+        self.plot_ax.set_title('{:.2f}'.format(params[0])+' $\mu$m/s')
         self.plot_canvas.draw()
-        self.label_lines()
-
     def get_img_process_settings(self):
         if self.s_edge_method.get()=='Threshold Grain':
             if self.bool_multi_ranges:
@@ -897,7 +789,7 @@ class GrowthRateAnalyzer(ttk.Frame):
         if not os.path.isdir(self.save_dir):
             os.mkdir(self.save_dir)
         # Save growth rate file
-        # header = 'time(s),'
+        # header = 'time (s), radius (micron), x, y'
         # for i in range(1,self.distances.shape[0]+1):
             # header += 'line#'+str(i)+'(micron)'
             # if not i == self.distances.shape[0]:
@@ -908,9 +800,12 @@ class GrowthRateAnalyzer(ttk.Frame):
             # header += growth_rate
             # if not i == len(self.growth_rates_string):
                 # header += ','
-        # savename = self.increment_save_name(self.save_dir,'radius_vs_time','.csv')
-        # np.savetxt(os.path.join(self.save_dir,savename+'.csv'),np.transpose(np.insert(self.distances,0,self.times,axis=0)),
-                    # delimiter=',',header=header)
+        export_data = np.array([self.sorted_times,self.distances,
+                             self.growth_edge_x,self.growth_edge_y])
+        savename = self.increment_save_name(self.save_dir,'radius_vs_time','.csv')
+        np.savetxt(os.path.join(self.save_dir,savename+'.csv'),
+                 np.transpose(export_data),
+                 delimiter=',',header='time (s),radius (micron),x,y')
         # savename = self.increment_save_name(self.save_dir,'growthrates','.csv')
         # with open(os.path.join(self.save_dir,savename+'.csv'), 'a') as f:
             # f.write('Line#,Growth Rate (micron/sec) \n')
@@ -918,73 +813,75 @@ class GrowthRateAnalyzer(ttk.Frame):
                 # line = str(idx+1) + ',' + str(growthRate) + '\n'
                 # f.write(line)
         # Save figures
-        savename = self.increment_save_name(self.save_dir,'growth_rates_plot','.png')
+        savename = self.increment_save_name(self.save_dir,'image_with_points','.png')
         self.image_fig.savefig(os.path.join(self.save_dir,savename+'.png'),dpi=200,bbox_inches='tight')
-        savename = self.increment_save_name(self.save_dir,'threshold_plot','.png')
-        self.threshold_fig.savefig(os.path.join(self.save_dir,savename+'.png'),dpi=200,bbox_inches='tight')
+        savename = self.increment_save_name(self.save_dir,'radius_vs_time_plot','.png')
+        self.plot_fig.savefig(os.path.join(self.save_dir,savename+'.png'),dpi=200,bbox_inches='tight')
+        #savename = self.increment_save_name(self.save_dir,'threshold_plot','.png')
+        #self.threshold_fig.savefig(os.path.join(self.save_dir,savename+'.png'),dpi=200,bbox_inches='tight')
         # Save dataframe
         # If no file was selected make new filename and df
-        if not self.df_file:
-            self.df_file = (self.increment_save_name(
-                self.df_dir,str(datetime.date.today()) + '_df','.pkl')
-                +'.pkl'
-                )
-            self.df = pd.DataFrame()
-        # otherwise, load df
-        else:
-            self.df = pd.read_pickle(os.path.join(self.df_dir,self.df_file))
-        # Also save a local df pkl file in the 'Analysis' folder, in case user is stupid and overwrites elsewhere
-        df_local_file = os.path.join(self.save_dir,'df.pkl')
-        if os.path.isfile(df_local_file):
-            df_local = pd.read_pickle(df_local_file)
-        else:
-            df_local = pd.DataFrame()
-        # Now append data
-        data_dict_list=[]
-        img_process_settings = self.get_img_process_settings()
-        for line_idx,growth_rate in enumerate(self.growth_rates):
-            temp_dict = {'growth_rate_umps':growth_rate,
-                        'line':self.lines[line_idx],
-                        'x1,x2,y1,y2':(self.x1,self.x2,self.y1,self.y2),
-                        'image_files':[os.path.basename(x) for x in self.time_files],
-                        'image_dir':os.path.split(self.time_files[0])[0],
-                        'threshold_lower':img_process_settings['threshold_lower'],
-                        'threshold_upper':img_process_settings['threshold_upper'],
-                        'disk':int(self.s_disk.get()),
-                        'histogram_equalization':self.bool_eq_hist.get(),
-                        'edge_find_method':self.s_edge_method.get()}
-            for key,input_dict in self.sample_props.items():
-                if input_dict['dtype']=='string':
-                    temp_string = self.s_sample_props[key].get()
-                    if '/' in temp_string:
-                        temp_list = []
-                        for substring in temp_string.split('/'):
-                            temp_list.append(substring)
-                        temp_dict[key]=temp_list
-                    else:
-                        temp_dict[key]=temp_string
-                elif input_dict['dtype']=='float':
-                    # Try separating by '/' for layer stacks
-                    temp_string = self.s_sample_props[key].get()
-                    if '/' in temp_string:
-                        temp_list = []
-                        for sublayer in temp_string.split('/'):
-                            temp_list.append(float(sublayer))
-                        temp_dict[key]=temp_list
-                    else:
-                        temp_dict[key]=float(self.s_sample_props[key].get())
-            data_dict_list.append(temp_dict)
-        #print(data_dict_list)
-        self.df = self.df.append(data_dict_list,ignore_index=True)
-        df_local = df_local.append(data_dict_list,ignore_index=True)
-        #print(self.df)
-        # Pickle the dataframe
-        self.df.to_pickle(os.path.join(self.df_dir,self.df_file))
-        df_local.to_pickle(df_local_file)
-        # Save csv of data
-        #savename = self.increment_save_name(self.save_dir,'growth_rates_data','.csv')+'.csv'
-        df_local.to_csv(os.path.join(self.save_dir,'growth_rates_data.csv'))
-        print('results saved to ' + self.df_dir + self.df_file)
+        # if not self.df_file:
+            # self.df_file = (self.increment_save_name(
+                # self.df_dir,str(datetime.date.today()) + '_df','.pkl')
+                # +'.pkl'
+                # )
+            # self.df = pd.DataFrame()
+        # # otherwise, load df
+        # else:
+            # self.df = pd.read_pickle(os.path.join(self.df_dir,self.df_file))
+        # # Also save a local df pkl file in the 'Analysis' folder, in case user is stupid and overwrites elsewhere
+        # df_local_file = os.path.join(self.save_dir,'df.pkl')
+        # if os.path.isfile(df_local_file):
+            # df_local = pd.read_pickle(df_local_file)
+        # else:
+            # df_local = pd.DataFrame()
+        # # Now append data
+        # data_dict_list=[]
+        # img_process_settings = self.get_img_process_settings()
+        # for line_idx,growth_rate in enumerate(self.growth_rates):
+            # temp_dict = {'growth_rate_umps':growth_rate,
+                        # 'line':self.lines[line_idx],
+                        # 'x1,x2,y1,y2':(self.x1,self.x2,self.y1,self.y2),
+                        # 'image_files':[os.path.basename(x) for x in self.time_files],
+                        # 'image_dir':os.path.split(self.time_files[0])[0],
+                        # 'threshold_lower':img_process_settings['threshold_lower'],
+                        # 'threshold_upper':img_process_settings['threshold_upper'],
+                        # 'disk':int(self.s_disk.get()),
+                        # 'histogram_equalization':self.bool_eq_hist.get(),
+                        # 'edge_find_method':self.s_edge_method.get()}
+            # for key,input_dict in self.sample_props.items():
+                # if input_dict['dtype']=='string':
+                    # temp_string = self.s_sample_props[key].get()
+                    # if '/' in temp_string:
+                        # temp_list = []
+                        # for substring in temp_string.split('/'):
+                            # temp_list.append(substring)
+                        # temp_dict[key]=temp_list
+                    # else:
+                        # temp_dict[key]=temp_string
+                # elif input_dict['dtype']=='float':
+                    # # Try separating by '/' for layer stacks
+                    # temp_string = self.s_sample_props[key].get()
+                    # if '/' in temp_string:
+                        # temp_list = []
+                        # for sublayer in temp_string.split('/'):
+                            # temp_list.append(float(sublayer))
+                        # temp_dict[key]=temp_list
+                    # else:
+                        # temp_dict[key]=float(self.s_sample_props[key].get())
+            # data_dict_list.append(temp_dict)
+        # #print(data_dict_list)
+        # self.df = self.df.append(data_dict_list,ignore_index=True)
+        # df_local = df_local.append(data_dict_list,ignore_index=True)
+        # #print(self.df)
+        # # Pickle the dataframe
+        # self.df.to_pickle(os.path.join(self.df_dir,self.df_file))
+        # df_local.to_pickle(df_local_file)
+        # # Save csv of data
+        # #savename = self.increment_save_name(self.save_dir,'growth_rates_data','.csv')+'.csv'
+        # df_local.to_csv(os.path.join(self.save_dir,'growth_rates_data.csv'))
+        # print('results saved to ' + self.df_dir + self.df_file)
 
     def increment_save_name(self,path,savename,extension):
         name_hold = savename
