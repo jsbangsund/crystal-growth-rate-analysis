@@ -490,6 +490,7 @@ class GrowthRateAnalyzer(ttk.Frame):
         self.t_file_dir.insert(INSERT, self.base_dir +'/')
 
     def pick_crop_region(self):
+        # Fix this. Image ranges aren't reset.  
         self.reset_image_display(reset_crop=True)
         # Zoom to region of interest in image. This will select crop region below
         # Pick the last time so the whole grain is contained within the crop region
@@ -636,7 +637,6 @@ class GrowthRateAnalyzer(ttk.Frame):
             self.pick_points.set_data(self.growth_edge_x,self.growth_edge_y)
             self.image_canvas.draw()
             self.get_distance()
-            self.plot_canvas.draw()
             self.forward_frame()
             #print(x,y)
             
@@ -697,8 +697,6 @@ class GrowthRateAnalyzer(ttk.Frame):
         # print(nearby_point)
         # print(point_on_line)
         # print(total_line_length)
-        print(self.distances)
-        print(self.times)
     # This function is connected to the right arrow key
     def forward_frame(self,_event=None):
         # Get coordinates from last frame
