@@ -491,21 +491,14 @@ class GrowthRateAnalyzer(ttk.Frame):
         self.t0 = self.times[self.sort_indices[0]]
         self.sorted_times = np.array(self.times)[self.sort_indices]-self.t0
         self.time_files = np.array(self.time_files)[self.sort_indices]
-    def pick_crop_region(self):
-        self.extract_times_and_sort() # saves self.times and self.sort_indices
-        self.t0 = self.times[self.sort_indices[0]]
-        self.sorted_times = np.array(self.times)[self.sort_indices]-self.t0
-        self.time_files = np.array(self.time_files)[self.sort_indices]
-        # Fix this. Image ranges aren't reset.  
-        self.reset_image_display(reset_crop=True)
+    def pick_crop_region(self): 
+        self.reset_image_display(reset_crop=False)
         # Zoom to region of interest in image. This will select crop region below
         # Pick the last time so the whole grain is contained within the crop region
         img=misc.imread(os.path.join(self.base_dir,self.time_files[-1]))#,mode='L'
         self.full_last_frame = img # store last frame 
         #img = exposure.rescale_intensity(img,in_range='image')
         #img = exposure.equalize_adapthist(img,clip_limit=0.05)
-        #fig,self.crop_ax=plt.subplots()
-        #self.crop_fig, self.crop_ax = plt.subplots()
         if not self.crop_initialized:
             self.cropData = self.image_ax.imshow(img)
             self.image_canvas.draw()
@@ -515,10 +508,6 @@ class GrowthRateAnalyzer(ttk.Frame):
             self.image_canvas.draw()
         self.crop_initialized = True
         self.axes_ranges_initialized = False
-        # Reset threshold
-        self.threshold_initialized = False
-        #plt.show()
-        #self.image_canvas.draw()
     def get_axes_ranges(self):
         x1,x2=self.image_ax.get_xlim()
         y2,y1=self.image_ax.get_ylim()
@@ -551,10 +540,11 @@ class GrowthRateAnalyzer(ttk.Frame):
         self.cropData.set_data(new_image)
         self.image_ax.relim()
         self.image_canvas.draw()
-    def reset_image_display(self,reset_crop=False,delete_line=True):
-        # Reset ranges
+    def reset_image_display(self,reset_crop=True,delete_line=True):
         if reset_crop:
-            self.crop_initialized = False
+            # Reset axes limits
+            self.image_ax.set_xlim(0,self.full_last_frame.shape[1])
+            self.image_ax.set_ylim(self.full_last_frame.shape[0],0)
         # Delete lines
         if delete_line:
             # Remove old lines
@@ -627,7 +617,7 @@ class GrowthRateAnalyzer(ttk.Frame):
         timeFile = self.time_files[sort_idx]
         self.t0 = self.times[sort_idx]
         self.sorted_times = np.array(self.times)[self.sort_indices]-self.t0
-        self.reset_image_display(delete_line=False)
+        self.reset_image_display(reset_crop=False,delete_line=False)
         self.load_frame(frame_index=sort_idx)
         self.image_ax.set_title('Frame #' + str(self.current_frame_index))
         
