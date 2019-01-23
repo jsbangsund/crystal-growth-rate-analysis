@@ -1,8 +1,7 @@
 # Improvements to consider:
 # give option for time identifier string in case time=*s wasn't followed
-# give option to calibrate image length from window pixel width (based on known image window length), or just manually give a micron/pixel value
 # To ensure extracting perpendicular to growth front, could draw tangent line and specify
-# point where the tangent touches as the center point for a 90 degree rotation
+    # point where the tangent touches as the center point for a 90 degree rotation
 # Other options:
 # http://bigwww.epfl.ch/thevenaz/pointpicker/
 ###################################################################
@@ -54,17 +53,6 @@ from matplotlib.patches import Rectangle
 # Colors
 from palettable.tableau import Tableau_10, Tableau_20
 from palettable.colorbrewer.qualitative import Set1_9
-
-#plt.style.use('ggplot')
-# styleDir = os.path.join(os.path.expanduser('~'),
-            # 'Google Drive','Research',
-            # 'Templates','matplotlib')
-#plt.style.use(os.path.join(styleDir,'origin2.mplstyle.py'))
-#import warnings
-# Install moviepy via conda install -c conda-forge moviepy
-# from moviepy.editor import VideoFileClip
-# from moviepy.video.fx.all import crop
-#warnings.filterwarnings('ignore')
 matplotlib.rc("savefig",dpi=100)
 ################################################################################
 
