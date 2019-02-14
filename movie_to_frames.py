@@ -1,12 +1,13 @@
 # This program saves frames of a movie as individual .png files to facilitate analysis
 import os
+import numpy as np
 # Install moviepy with: conda install -c conda-forge moviepy
 from moviepy.editor import VideoFileClip
 
-time_step_seconds = 0.25 # time step between frames to save
+time_step_seconds = 0.5 # time step between frames to save
 # Define directory of interest
-base_dir = os.path.join('2018-05-25_TPBi_Thickness','165C_50nm_timeseries')
-movie_file = 'something.avi'
+base_dir = os.path.join(os.path.expanduser('~'),'Desktop','User Data','Jack','190110_TPBi')
+movie_file = 'mat=TPBi_sub=Si_T=150C_Mag=50x_Polarized=0_t=45nm-000066.avi'
 # Or select interactively:
 #root = tk.Tk()
 #root.withdraw()

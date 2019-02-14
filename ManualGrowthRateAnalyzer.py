@@ -18,6 +18,7 @@ if sys_pf == 'darwin':
     matplotlib.use("TkAgg") # This fixes crashes on mac
 import matplotlib.pyplot as plt
 from scipy import ndimage, misc
+import imageio
 from scipy.signal import argrelextrema
 from scipy.optimize import curve_fit
 # sci-kit image
@@ -142,13 +143,15 @@ class GrowthRateAnalyzer(ttk.Frame):
         self.save_initialized = False
         self.df_file = None
         self.base_dir = os.getcwd()
+        # Default crop coordinates
+        self.x1,self.x2,self.y1,self.y2 = 1054,1852,372,1203
         # Default dir for troubleshooting purposes
         self.base_dir = os.path.join(
-            os.path.expanduser('~'),'Google Drive','Research','Data','Gratings')
-        self.base_dir = os.path.join(
-            os.path.expanduser('~'),'Google Drive','Research','Data','Gratings',
-            '2019-01-09_Capped TPBi','TPBi_30nm_Alq3','190C','timeseries_10x')
-        self.time_files = glob.glob(os.path.join(self.base_dir,'*.tif'))
+            os.path.expanduser('~'),'Desktop','User Data','Jack','190110_TPBi','Frames')
+        # self.base_dir = os.path.join(
+            # os.path.expanduser('~'),'Google Drive','Research','Data','Gratings',
+            # '2019-01-09_Capped TPBi','TPBi_30nm_Alq3','190C','timeseries_10x')
+        self.time_files = glob.glob(os.path.join(self.base_dir,'*.png'))
         # initialize dataframe save location
         self.df_dir = os.path.join(os.getcwd(),'dataframes')
         if not os.path.isdir(self.df_dir):
@@ -442,7 +445,7 @@ class GrowthRateAnalyzer(ttk.Frame):
         # Commenting this out as slow for large number of images
         #self.full_images=['']*len(self.time_files)
         #for i,f in enumerate(self.time_files):
-            #self.full_images[i] = misc.imread(f,mode='L')
+            #self.full_images[i] = imageio.imread(f,mode='L')
         # Try to find magnification and other metadata, if base_dir has changed
         new_base_dir = os.path.dirname(self.time_files[0])
         if not new_base_dir==self.base_dir:
@@ -500,7 +503,7 @@ class GrowthRateAnalyzer(ttk.Frame):
         self.reset_image_display(reset_crop=False)
         # Zoom to region of interest in image. This will select crop region below
         # Pick the last time so the whole grain is contained within the crop region
-        img=misc.imread(os.path.join(self.base_dir,self.time_files[-1]))#,mode='L'
+        img=imageio.imread(os.path.join(self.base_dir,self.time_files[0]))#,mode='L'
         self.full_last_frame = img # store last frame 
         #img = exposure.rescale_intensity(img,in_range='image')
         #img = exposure.equalize_adapthist(img,clip_limit=0.05)
@@ -534,7 +537,7 @@ class GrowthRateAnalyzer(ttk.Frame):
         # Update crop range
         self.get_axes_ranges()
         # load image
-        img=misc.imread(os.path.join(self.base_dir,self.time_files[frame_index]))
+        img=imageio.imread(os.path.join(self.base_dir,self.time_files[frame_index]))
         # Set data
         self.cropData.set_data(img)
         self.image_canvas.draw()
@@ -612,6 +615,8 @@ class GrowthRateAnalyzer(ttk.Frame):
         # Get line segments
         self.get_line_segments()
         # Initialize coordinates
+        self.ref_point_x = np.zeros(len(self.time_files))
+        self.ref_point_y = np.zeros(len(self.time_files))
         self.growth_edge_x = np.zeros(len(self.time_files))
         self.growth_edge_y = np.zeros(len(self.time_files))
         self.distances = np.zeros(len(self.time_files))
@@ -622,7 +627,7 @@ class GrowthRateAnalyzer(ttk.Frame):
             self.get_axes_ranges()
         # Check if images dimensions are as expected. If not use image width
         # Not very robust yet
-        img = misc.imread(os.path.join(self.base_dir,self.time_files[0]))
+        img = imageio.imread(os.path.join(self.base_dir,self.time_files[0]))
         if img.shape[1]==2048:
             length_per_pixel = micron_per_pixel[self.s_mag.get()]
         else:
@@ -663,14 +668,41 @@ class GrowthRateAnalyzer(ttk.Frame):
                 # else:
                     # pass
         def on_pick(event):
-            # Act on right click
+            # On scroll click, set reference point
+            if event.button == 2:
+                x = event.xdata
+                y = event.ydata
+                self.ref_point_x[self.current_frame_index] = x
+                self.ref_point_y[self.current_frame_index] = y
+                #print('Ref for frame' + str(self.current_frame_index)+',x='+'{:.1f}'.format(x)+'y='+'{:.1f}'.format(y))
+                if self.current_frame_index==0:
+                    if 'ref_point' in self.__dict__.keys():
+                        self.ref_point.set_data(x,y)
+                    else:
+                        self.ref_point, = self.image_ax.plot(x,y,'o',ms=2,alpha=0.5)
+                else:
+                    self.ref_point.set_data(x,y)
+                    # Maybe should take int of this
+                    dx = self.ref_point_x[self.current_frame_index] - self.ref_point_x[0]
+                    dy = self.ref_point_y[self.current_frame_index] - self.ref_point_y[0]
+                    print('dx='+'{:.1f}'.format(dx)+'dy='+'{:.1f}'.format(dy))
+                    # Shift endpoints of reference line by dx and dy
+                    line = self.lines[0]
+                    self.line.set_data([line[0][0]+dx,line[1][0]+dx],[line[0][1]+dy,line[1][1]+dy])
+                self.image_canvas.draw()
+            # On right click, get growth edge point
             if event.button == 3:
                 x = event.xdata
                 y = event.ydata
                 self.growth_edge_x[self.current_frame_index] = x
                 self.growth_edge_y[self.current_frame_index] = y
                 # Could just plot to current frame [:self.current_frame_index]
-                self.pick_points.set_data(self.growth_edge_x,self.growth_edge_y)
+                li=self.current_frame_index-2
+                if li<0:
+                    li=0
+                ui=self.current_frame_index+1
+                # Plot only the last five points
+                self.pick_points.set_data(self.growth_edge_x[li:ui],self.growth_edge_y[li:ui])
                 self.image_canvas.draw()
                 self.get_distance()
                 # If supporting multiple lines, remove this:
@@ -701,11 +733,20 @@ class GrowthRateAnalyzer(ttk.Frame):
             length_per_pixel = micron_per_pixel[self.s_mag.get()]
         else:
             length_per_pixel = image_width_microns[self.s_mag.get()]/img.shape[1]
-        # Get endpoints of line
-        line = self.lines[0]
         
-        p1 = (line[0][0],line[0][1])
-        p2 = (line[1][0],line[1][1])
+        # Get movement of reference point to shift where line is drawn
+        # Maybe should take int of this
+        dx = self.ref_point_x[self.current_frame_index] - self.ref_point_x[0]
+        dy = self.ref_point_y[self.current_frame_index] - self.ref_point_y[0]
+        
+        # Get endpoints of line, shifted by reference
+        line = self.lines[0]
+        p1 = (line[0][0]+dx,line[0][1]+dy)
+        p2 = (line[1][0]+dx,line[1][1]+dy)
+        
+        # Move line plot
+        self.line.set_data([line[0][0]+dx,line[1][0]+dx],[line[0][1]+dy,line[1][1]+dy])
+        
         if nearby_point is None:
             nearby_point = (self.growth_edge_x[self.current_frame_index],
                           self.growth_edge_y[self.current_frame_index])
@@ -824,11 +865,11 @@ class GrowthRateAnalyzer(ttk.Frame):
             # if not i == len(self.growth_rates_string):
                 # header += ','
         export_data = np.array([self.sorted_times,self.distances,
-                             self.growth_edge_x,self.growth_edge_y])
+                             self.growth_edge_x,self.growth_edge_y,self.ref_point_x,self.ref_point_y])
         savename = self.increment_save_name(self.save_dir,'radius_vs_time','.csv')
         np.savetxt(os.path.join(self.save_dir,savename+'.csv'),
                  np.transpose(export_data),
-                 delimiter=',',header='time (s),radius (micron),x,y')
+                 delimiter=',',header='time (s),radius (micron),edge x,edge y,ref x,ref y')
         # savename = self.increment_save_name(self.save_dir,'growthrates','.csv')
         # with open(os.path.join(self.save_dir,savename+'.csv'), 'a') as f:
             # f.write('Line#,Growth Rate (micron/sec) \n')
@@ -928,7 +969,7 @@ class GrowthRateAnalyzer(ttk.Frame):
             pass
         for line in self.image_ax[0].lines:
             line.remove()
-        #img=misc.imread(os.path.join(self.base_dir,self.time_files[-1]))#,mode='L')
+        #img=imageio.imread(os.path.join(self.base_dir,self.time_files[-1]))#,mode='L')
         #img = exposure.equalize_adapthist(img,clip_limit=0.05)
         #self.cropData.set_data(img[self.y1:self.y2,self.x1:self.x2])
         line, = self.image_ax[0].plot([], [], '-or')
