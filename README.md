@@ -18,16 +18,25 @@ Example crystal growth:
 ## Running the software
 To ensure that the GUI runs properly, it is recommended that you create a virtual environment using Anaconda (see docs [here](https://docs.conda.io/projects/conda/en/latest/user-guide/tasks/manage-environments.html#create-env-file-manually))
 
-Install the environment from the environment.yml file in this repository:
+Install the environment from the environment.yml file in this repository (you can change the name of the environment that will be created in the first line of environment.yml):
 
     conda env create -f environment.yml
+
 Then activate this environment:
 
-    conda activate myenv
+    conda activate py35_image
     
 Then, run the program:
 
     python GrowthRateAnalyzer.py
+    
+To delete an environment:
+
+    conda env remove -n ENV_NAME
+    
+To update the environment.yml file:
+    
+    conda env export > environment.yml
     
 ## Other details
 ManualGrowthRateAnalyzer.py allows user to manually pick out edge points.
