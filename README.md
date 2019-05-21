@@ -17,11 +17,16 @@ Example crystal growth:
 
 ## Running the software
 To ensure that the GUI runs properly, it is recommended that you create a virtual environment using Anaconda (see docs [here](https://docs.conda.io/projects/conda/en/latest/user-guide/tasks/manage-environments.html#create-env-file-manually))
+
 Install the environment from the environment.yml file in this repository:
+
     conda env create -f environment.yml
 Then activate this environment:
+
     conda activate myenv
+    
 Then, run the program:
+
     python GrowthRateAnalyzer.py
     
 ## Other details
