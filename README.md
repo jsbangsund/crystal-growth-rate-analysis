@@ -1,4 +1,8 @@
 # Crystal Growth Rate Analysis
+This code was developed to analyze the images in our paper on spontaneous pattern formation in organic semiconductors. If you find this code useful, please cite:
+
+Formation of aligned periodic patterns during the crystallization of organic semiconductor thin films. Nature Materials 1 (2019). doi: [10.1038/s41563-019-0379-3](https://doi.org/10.1038/s41563-019-0379-3).
+
 ## Summary
 This package provides an interactive GUI for measuring crystal growth rates from timeseries polarized optical microscopy images.
 The GUI allows the user to load a series of images and customize various image processing routines to improve edge detection. Two edge detection routines are included:
