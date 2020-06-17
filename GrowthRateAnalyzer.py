@@ -687,7 +687,8 @@ class GrowthRateAnalyzer(ttk.Frame):
         new_base_dir = os.path.dirname(self.time_files[0])
         if not new_base_dir==self.base_dir:
             base_file = os.path.basename(self.time_files[0])
-            base_file = base_file.replace('-','_')
+            # Commented next line out so multilayers can be separated by hyphen: Si-MoO3
+            #base_file = base_file.replace('-','_') 
             splits = base_file.split('_')
             for split in splits:
                 split2 = split.split('=')
@@ -697,24 +698,24 @@ class GrowthRateAnalyzer(ttk.Frame):
                         self.s_mag.set(split2[1])
                         print(self.s_mag.get())
                 elif 'sub' in split.lower():
-                     # looking for _sub=*_ or _substrate=*_ in filename
+                    # looking for _sub=*_ or _substrate=*_ in filename
                     if len(split2)>1:
                         self.s_sample_props['substrate'].set(split2[1])
                 elif any(x in split2[0] for x in ['Ta','Tanneal','T']):
                     # looking for _T=*C_ or _Tanneal=*C_ or _Ta=*C_
-                      if len(split2)>1:
-                        self.s_sample_props['anneal_temp_c'].set(split2[1][:-1])
+                    if len(split2)>1:
+                        self.s_sample_props['anneal_temp_c'].set(split2[1].split('C')[0])
                 elif any(x in split2[0] for x in ['t','thick','thickness']) and 'nm' in split:
                     # looking for _t=*nm_ or _thick=*nm_, etc.
-                      if len(split2)>1:
-                        self.s_sample_props['thickness_nm'].set(split2[1][:-2])
-                      else:
+                    if len(split2)>1:
+                        self.s_sample_props['thickness_nm'].set(split2[1].split('nm')[0])
+                    else:
                         self.s_sample_props['thickness_nm'].set(str(split2))
                 elif 'mat=' in split:
                     self.s_sample_props['material'].set(split[4:])
                 elif any(x in split for x in ['Td','Tgrowth','Tdep']):
-                      if len(split2)>1:
-                        self.s_sample_props['deposition_temp_c'].set(split2[1][:-1])
+                    if len(split2)>1:
+                        self.s_sample_props['deposition_temp_c'].set(split2[1].split('C')[0])
 
             # Try to find growth date from folder (move up a level up to 4 times)
             split = os.path.split(new_base_dir)
