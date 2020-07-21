@@ -13,7 +13,8 @@ import matplotlib
 if sys_pf == 'darwin':
     matplotlib.use("TkAgg") # This fixes crashes on mac
 import matplotlib.pyplot as plt
-from scipy import ndimage, misc
+from imageio import imread
+from scipy import ndimage
 from scipy.signal import argrelextrema
 from scipy.optimize import curve_fit
 # sci-kit image
@@ -94,9 +95,9 @@ def threshold_crop_denoise(img_file,x1,x2,y1,y2,threshold_lower,threshold_upper,
     multiple_ranges allows for multiple pixel ranges to be threshold (logical or)
         If this is selected, threshold_lower and _upper must be lists of equal length
     '''
-    # Read image in gray scale (mode='L'), unless a pre-loaded image is passed
+    # Read image in gray scale (as_gray=True)/255, unless a pre-loaded image is passed
     if img is None:
-        img=misc.imread(img_file,mode='L')
+        img=imread(img_file,as_gray=True)/255
     if rescale:
         img = exposure.rescale_intensity(img,in_range=rescale)
     if equalize_hist:
@@ -130,11 +131,11 @@ def threshold_crop_denoise(img_file,x1,x2,y1,y2,threshold_lower,threshold_upper,
 
 def subtract_and_denoise(img_file1,img_file2,x1,x2,y1,y2,d,threshold=None,
                          rescale=None,img1=None,img2=None,equalize_hist=False,clip_limit=0.05):
-    # Read image in gray scale (mode='L'), unless a pre-loaded image is passed
+    # Read image in gray scale (as_gray=True)/255, unless a pre-loaded image is passed
     if img1 is None:
-        img1=misc.imread(img_file1,mode='L')
+        img1=imread(img_file1,as_gray=True)/255
     if img2 is None:
-        img2=misc.imread(img_file2,mode='L')
+        img2=imread(img_file2,as_gray=True)/255
     if rescale:
         img1 = exposure.rescale_intensity(img1,in_range=rescale)
         img2 = exposure.rescale_intensity(img2,in_range=rescale)
@@ -682,7 +683,7 @@ class GrowthRateAnalyzer(ttk.Frame):
         # Load images
         self.full_images=['']*len(self.time_files)
         for i,f in enumerate(self.time_files):
-            self.full_images[i] = misc.imread(f,mode='L')
+            self.full_images[i] = imread(f,as_gray=True)/255
         # Try to find magnification and other metadata, if base_dir has changed
         new_base_dir = os.path.dirname(self.time_files[0])
         if not new_base_dir==self.base_dir:
@@ -736,8 +737,7 @@ class GrowthRateAnalyzer(ttk.Frame):
     def pick_crop_region(self):
         # Zoom to region of interest in image. This will select crop region below
         # Pick the last time so the whole grain is contained within the crop region
-        img=misc.imread(os.path.join(self.base_dir,self.time_files[-1]),
-                      mode='L')
+        img=imread(os.path.join(self.base_dir,self.time_files[-1]),as_gray=True)/255
         #img = exposure.rescale_intensity(img,in_range='image')
         img = exposure.equalize_adapthist(img,clip_limit=0.05)
         #fig,self.crop_ax=plt.subplots()
@@ -804,9 +804,9 @@ class GrowthRateAnalyzer(ttk.Frame):
             self.threshold_initialized=False
             [b.remove() for b in self.threshold_plot_data[3][2]]
         if not self.threshold_initialized:
-            self.original_image=misc.imread(os.path.join(self.base_dir,
+            self.original_image=imread(os.path.join(self.base_dir,
                                                   self.time_files[-1]),
-                                      mode='L')
+                                      as_gray=True)/255
             try:
                 [b.remove() for b in self.threshold_plot_data[3][2]]
             except:
@@ -861,9 +861,9 @@ class GrowthRateAnalyzer(ttk.Frame):
             self.threshold_initialized=False
             [b.remove() for b in self.threshold_plot_data[3][2]]
         if not self.threshold_initialized:
-            self.original_image=misc.imread(os.path.join(self.base_dir,
+            self.original_image=imread(os.path.join(self.base_dir,
                                                   self.time_files[-1]),
-                                      mode='L')
+                                      as_gray=True)/255
             try:
                 [b.remove() for b in self.threshold_plot_data[3][2]]
             except:
@@ -964,7 +964,7 @@ class GrowthRateAnalyzer(ttk.Frame):
         self.ax[0].relim()
         #self.ax[0].imshow(denoised)
         # Alternatively
-        #img=misc.imread(os.path.join(self.base_dir,self.time_files[-1]),mode='L')
+        #img=imread(os.path.join(self.base_dir,self.time_files[-1]),as_gray=True)/255
         # ax.imshow(img[self.y1:self.y2,self.x1:self.x2])
         line, = self.ax[0].plot([], [],'-or')  # empty line
         self.linebuilder = LineBuilder(line)
@@ -994,7 +994,7 @@ class GrowthRateAnalyzer(ttk.Frame):
         # Remove old lines
         for line in self.ax[1].lines:
             line.remove()
-        img=misc.imread(os.path.join(self.base_dir,self.time_files[-1]),mode='L')
+        img=imread(os.path.join(self.base_dir,self.time_files[-1]),as_gray=True)/255
         #ax[0].imshow(img)
         if self.bool_multi_ranges:
             threshold_lower = [float(x) for x in
@@ -1040,6 +1040,8 @@ class GrowthRateAnalyzer(ttk.Frame):
             self.get_axes_ranges()
         # Remove old data
         self.ax[1].clear()
+        # Get growth directions
+        self.get_line_segments()
         # Check if images dimensions are as expected. If not use image width
         # Not very robust yet
         img = self.full_images[-1]
@@ -1129,6 +1131,9 @@ class GrowthRateAnalyzer(ttk.Frame):
                 (self.distances[line_idx]>np.median(self.distances[line_idx][0:3])*0.8,
                 self.distances[line_idx]<np.median(self.distances[line_idx][-3:])*1.05,
                 )))[0]
+            # Check for empty filter results, if so return full array
+            if len(filterIdx)==0:
+                filterIdx = np.arange(0,len(self.times))
             self.times = np.array(self.times)
             # Fit the data with a line
             params = np.polyfit(self.times[filterIdx], self.distances[line_idx][filterIdx], 1)
@@ -1326,7 +1331,7 @@ class GrowthRateAnalyzer(ttk.Frame):
             pass
         for line in self.ax[0].lines:
             line.remove()
-        #img=misc.imread(os.path.join(self.base_dir,self.time_files[-1]))#,mode='L')
+        #img=imread(os.path.join(self.base_dir,self.time_files[-1]))#,as_gray=True)/255
         #img = exposure.equalize_adapthist(img,clip_limit=0.05)
         #self.cropData.set_data(img[self.y1:self.y2,self.x1:self.x2])
         line, = self.ax[0].plot([], [], '-or')
