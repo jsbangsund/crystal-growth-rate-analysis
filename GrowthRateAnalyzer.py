@@ -53,6 +53,20 @@ from palettable.colorbrewer.qualitative import Set1_9
 matplotlib.rc("savefig",dpi=100)
 ################################################################################
 
+def read_image_wrapper(image_file):
+    '''
+    Wrapper function so all image read instances can be changed in one place.
+    This can be used to change both the image read function (currently imread)
+    or the kwargs provided to the read function.
+    '''
+    # Previous kwargs: format='tiff-pil',pilmode='L'
+    # pilmode='L' opens the file in grayscale
+    if image_file.endswith('.tiff') or image_file.endswith('.tif'):
+        print(np.amax(img),np.amin(img),img.shape)
+        return imread(image_file,format='tiff-pil',pilmode='L')
+    else:
+        return imread(image_file,as_gray=True)/255
+
 def setNiceTicks(ax,Nx=4,Ny=4,yminor=2,xminor=2,
                tick_loc=('both','both'),logx=False,logy=False):
     # If one of the axes is log, just use defaults
@@ -97,7 +111,7 @@ def threshold_crop_denoise(img_file,x1,x2,y1,y2,threshold_lower,threshold_upper,
     '''
     # Read image in gray scale (format='tiff-pil',pilmode='L'), unless a pre-loaded image is passed
     if img is None:
-        img=imread(img_file,format='tiff-pil',pilmode='L')
+        img=read_image_wrapper(img_file)
     if rescale:
         img = exposure.rescale_intensity(img,in_range=rescale)
     if equalize_hist:
@@ -133,9 +147,9 @@ def subtract_and_denoise(img_file1,img_file2,x1,x2,y1,y2,d,threshold=None,
                          rescale=None,img1=None,img2=None,equalize_hist=False,clip_limit=0.05):
     # Read image in gray scale (format='tiff-pil',pilmode='L'), unless a pre-loaded image is passed
     if img1 is None:
-        img1=imread(img_file1,format='tiff-pil',pilmode='L')
+        img1=read_image_wrapper(img_file1)
     if img2 is None:
-        img2=imread(img_file2,format='tiff-pil',pilmode='L')
+        img2=read_image_wrapper(img_file2)
     if rescale:
         img1 = exposure.rescale_intensity(img1,in_range=rescale)
         img2 = exposure.rescale_intensity(img2,in_range=rescale)
@@ -683,7 +697,7 @@ class GrowthRateAnalyzer(ttk.Frame):
         # Load images
         self.full_images=['']*len(self.time_files)
         for i,f in enumerate(self.time_files):
-            self.full_images[i] = imread(f,format='tiff-pil',pilmode='L')
+            self.full_images[i] = read_image_wrapper(f)
         # Try to find magnification and other metadata, if base_dir has changed
         new_base_dir = os.path.dirname(self.time_files[0])
         if not new_base_dir==self.base_dir:
@@ -737,7 +751,7 @@ class GrowthRateAnalyzer(ttk.Frame):
     def pick_crop_region(self):
         # Zoom to region of interest in image. This will select crop region below
         # Pick the last time so the whole grain is contained within the crop region
-        img=imread(os.path.join(self.base_dir,self.time_files[-1]),format='tiff-pil',pilmode='L')
+        img=read_image_wrapper(os.path.join(self.base_dir,self.time_files[-1]))
         #img = exposure.rescale_intensity(img,in_range='image')
         img = exposure.equalize_adapthist(img,clip_limit=0.05)
         #fig,self.crop_ax=plt.subplots()
@@ -804,9 +818,8 @@ class GrowthRateAnalyzer(ttk.Frame):
             self.threshold_initialized=False
             [b.remove() for b in self.threshold_plot_data[3][2]]
         if not self.threshold_initialized:
-            self.original_image=imread(os.path.join(self.base_dir,
-                                                  self.time_files[-1]),
-                                      format='tiff-pil',pilmode='L')
+            self.original_image=read_image_wrapper(os.path.join(self.base_dir,
+                                                  self.time_files[-1]))
             try:
                 [b.remove() for b in self.threshold_plot_data[3][2]]
             except:
@@ -861,9 +874,8 @@ class GrowthRateAnalyzer(ttk.Frame):
             self.threshold_initialized=False
             [b.remove() for b in self.threshold_plot_data[3][2]]
         if not self.threshold_initialized:
-            self.original_image=imread(os.path.join(self.base_dir,
-                                                  self.time_files[-1]),
-                                      format='tiff-pil',pilmode='L')
+            self.original_image=read_image_wrapper(os.path.join(self.base_dir,
+                                                  self.time_files[-1]))
             try:
                 [b.remove() for b in self.threshold_plot_data[3][2]]
             except:
@@ -964,7 +976,7 @@ class GrowthRateAnalyzer(ttk.Frame):
         self.ax[0].relim()
         #self.ax[0].imshow(denoised)
         # Alternatively
-        #img=imread(os.path.join(self.base_dir,self.time_files[-1]),format='tiff-pil',pilmode='L')
+        #img=read_image_wrapper(os.path.join(self.base_dir,self.time_files[-1]))
         # ax.imshow(img[self.y1:self.y2,self.x1:self.x2])
         line, = self.ax[0].plot([], [],'-or')  # empty line
         self.linebuilder = LineBuilder(line)
@@ -994,27 +1006,39 @@ class GrowthRateAnalyzer(ttk.Frame):
         # Remove old lines
         for line in self.ax[1].lines:
             line.remove()
-        img=imread(os.path.join(self.base_dir,self.time_files[-1]),format='tiff-pil',pilmode='L')
+        img=read_image_wrapper(os.path.join(self.base_dir,self.time_files[-1]))
         #ax[0].imshow(img)
-        if self.bool_multi_ranges:
-            threshold_lower = [float(x) for x in
-                            self.s_threshold_lower.get().split(',')]
-            threshold_upper = [float(x) for x in
-                            self.s_threshold_upper.get().split(',')]
-        else:
-            threshold_lower = float(self.s_threshold_lower.get())
-            threshold_upper = float(self.s_threshold_upper.get())
-        denoised = threshold_crop_denoise(
-                                      self.time_files[-1],
-                                      self.x1,self.x2,self.y1,self.y2,
-                                      threshold_lower,
-                                      threshold_upper,
-                                      int(self.s_disk.get()),
-                                      equalize_hist=self.bool_eq_hist.get(),
-                                      multiple_ranges=self.bool_multi_ranges.get(),
-                                      threshold_out=self.bool_threshold_out.get(),
-                                      clip_limit=float(self.s_clip_limit.get())
-                                      )[0]
+        if self.s_edge_method.get()=='Threshold Grain':
+            if self.bool_multi_ranges:
+                threshold_lower = [float(x) for x in
+                                self.s_threshold_lower.get().split(',')]
+                threshold_upper = [float(x) for x in
+                                self.s_threshold_upper.get().split(',')]
+            else:
+                threshold_lower = float(self.s_threshold_lower.get())
+                threshold_upper = float(self.s_threshold_upper.get())
+            denoised = threshold_crop_denoise(
+                                          self.time_files[-1],
+                                          self.x1,self.x2,self.y1,self.y2,
+                                          threshold_lower,
+                                          threshold_upper,
+                                          int(self.s_disk.get()),
+                                          equalize_hist=self.bool_eq_hist.get(),
+                                          multiple_ranges=self.bool_multi_ranges.get(),
+                                          threshold_out=self.bool_threshold_out.get(),
+                                          clip_limit=float(self.s_clip_limit.get())
+                                          )[0]
+        elif self.s_edge_method.get()=='Subtract Images':
+            denoised = subtract_and_denoise(
+                                    self.time_files[sort_idx],
+                                    self.time_files[self.sort_indices[idx+1]],
+                                    self.x1,self.x2,self.y1,self.y2,
+                                    int(self.s_disk.get()),
+                                    img1=self.full_images[sort_idx],
+                                    img2=self.full_images[self.sort_indices[idx+1]],
+                                    threshold=float(self.s_threshold_lower.get()),
+                                    equalize_hist=self.bool_eq_hist.get(),
+                                    clip_limit=float(self.s_clip_limit.get()))[0]
         # Get edge of growth front from image profile
         line = self.lines[0]
         profile = profile_line(denoised,
@@ -1331,7 +1355,6 @@ class GrowthRateAnalyzer(ttk.Frame):
             pass
         for line in self.ax[0].lines:
             line.remove()
-        #img=imread(os.path.join(self.base_dir,self.time_files[-1]))#,format='tiff-pil',pilmode='L')
         #img = exposure.equalize_adapthist(img,clip_limit=0.05)
         #self.cropData.set_data(img[self.y1:self.y2,self.x1:self.x2])
         line, = self.ax[0].plot([], [], '-or')
